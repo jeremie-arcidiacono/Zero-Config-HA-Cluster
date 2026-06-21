@@ -1,0 +1,29 @@
+# =============================================================================
+# /etc/systemd/network/10-eth0.network
+# Network configuration for eth0 (Raspberry Pi 5 Ethernet port)
+#
+# IPv4 DHCP + IPv6 SLAAC
+# =============================================================================
+
+[Match]
+Name=eth0
+
+[Network]
+DHCP=ipv4
+IPv6AcceptRA=yes
+
+# Enable multicast, required for Serf
+MulticastDNS=yes
+LLDP=yes
+EmitLLDP=yes
+
+[DHCPv4]
+ClientIdentifier=mac
+UseRoutes=yes
+UseGateway=yes
+UseDNS=yes
+UseNTP=yes
+
+[IPv6AcceptRA]
+# Accept Router Advertisements for SLAAC configuration
+DHCPv6Client=no
