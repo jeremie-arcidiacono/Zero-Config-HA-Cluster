@@ -31,10 +31,17 @@ useradd -m -G adm,sudo,users,plugdev,netdev -s /bin/bash ants
 echo "ants:ants" | chpasswd
 
 # Ask user to set a new password on first login
-passwd --expire ants
+#passwd --expire ants
 
 # Because userconfig.service is disabled, we need to explicitly enable the getty service for tty1 to allow login from the console
 systemctl enable getty@tty1.service
+
+# Setup SSH key authentication
+mkdir -p /home/ants/.ssh
+chmod 700 /home/ants/.ssh
+mv /tmp/authorized_keys /home/ants/.ssh/authorized_keys
+chmod 600 /home/ants/.ssh/authorized_keys
+chown -R ants:ants /home/ants/.ssh
 
 echo_step "Install required packages"
 apt-get update -qq
@@ -48,8 +55,9 @@ chmod 755 /usr/local/bin/k3s
 chmod 755 /usr/local/bin/install-k3s.sh
 # chmod 755 /usr/local/bin/antsd
 
-echo_step "Enable SSH server"
+echo_step "Setup SSH server"
 systemctl enable ssh
+chmod 600 /etc/ssh/sshd_config.d/00-ants-hardening.conf
 
 # Remove userconf-pi SSH banner, irrelevant since we provision a custom user directly
 rm -f /etc/ssh/sshd_config.d/rename_user.conf

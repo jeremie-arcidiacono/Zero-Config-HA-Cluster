@@ -115,6 +115,15 @@ build {
     destination = "/etc/systemd/network/10-eth0.network"
   }
 
+  provisioner "file" {
+    source      = "files/ssh/authorized_keys"
+    destination = "/tmp/authorized_keys"
+  }
+  provisioner "file" {
+    source      = "files/ssh/00-ants-hardening.conf"
+    destination = "/etc/ssh/sshd_config.d/00-ants-hardening.conf"
+  }
+
   # 3. System configuration
   provisioner "shell" {
     script = "scripts/provision.sh"
