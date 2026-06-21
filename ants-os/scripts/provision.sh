@@ -29,8 +29,12 @@ echo_step "Create default user to remove first-boot wizard"
 systemctl disable userconfig.service || true
 useradd -m -G adm,sudo,users,plugdev,netdev -s /bin/bash ants
 echo "ants:ants" | chpasswd
+
 # Ask user to set a new password on first login
 passwd --expire ants
+
+# Because userconfig.service is disabled, we need to explicitly enable the getty service for tty1 to allow login from the console
+systemctl enable getty@tty1.service
 
 echo_step "Install required packages"
 apt-get update -qq
