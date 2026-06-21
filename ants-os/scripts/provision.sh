@@ -51,6 +51,10 @@ chmod 755 /usr/local/bin/install-k3s.sh
 echo_step "Enable SSH server"
 systemctl enable ssh
 
+# Remove userconf-pi SSH banner, irrelevant since we provision a custom user directly
+rm -f /etc/ssh/sshd_config.d/rename_user.conf
+rm -f /usr/share/userconf-pi/sshd_banner
+
 echo_step "Move k3s air-gap images"
 mkdir -p /var/lib/rancher/k3s/agent/images
 mv /tmp/k3s-airgap-images-arm64.tar.zst /var/lib/rancher/k3s/agent/images/
