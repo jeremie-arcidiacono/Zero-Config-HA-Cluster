@@ -36,6 +36,10 @@ echo "ants:ants" | chpasswd
 # Because userconfig.service is disabled, we need to explicitly enable the getty service for tty1 to allow login from the console
 systemctl enable getty@tty1.service
 
+# Setup sudoers
+echo "ants ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/010_ants-nopasswd
+chmod 440 /etc/sudoers.d/010_ants-nopasswd
+
 # Setup SSH key authentication
 mkdir -p /home/ants/.ssh
 chmod 700 /home/ants/.ssh
