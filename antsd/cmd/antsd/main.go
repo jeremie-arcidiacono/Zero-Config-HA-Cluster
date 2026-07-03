@@ -1,9 +1,13 @@
 package main
 
 import (
+	"antsd/internal/cluster"
 	"antsd/internal/config"
+	"context"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
@@ -21,6 +25,12 @@ func main() {
 	lvl := conf.GetLogLevel()
 	logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: lvl}))
 
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-	// todo : start manager
+	mgr := cluster.New(conf, logger)
+	if err := mgr.Run(ctx); err != nil {
+		logger.Error("exited with error", "error", err)
+		os.Exit(1)
+	}
 }
