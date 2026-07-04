@@ -2,6 +2,7 @@ package serfnode
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -21,6 +22,27 @@ const (
 	EventUser
 	EventQuery
 )
+
+func (t EventType) String() string {
+	switch t {
+	case EventMemberJoin:
+		return "member-join"
+	case EventMemberLeave:
+		return "member-leave"
+	case EventMemberFailed:
+		return "member-failed"
+	case EventMemberUpdate:
+		return "member-update"
+	case EventMemberReap:
+		return "member-reap"
+	case EventUser:
+		return "user"
+	case EventQuery:
+		return "query"
+	default:
+		panic(fmt.Sprintf("unknown event type: %d", t))
+	}
+}
 
 type Event struct {
 	Type   EventType

@@ -43,7 +43,6 @@ func (m *Manager) Run(ctx context.Context) error {
 			m.logger.Info("manager shutting down")
 			return nil
 		case e := <-events:
-			// todo : display a string instead of the number for the event type
 			m.logger.Info("serf event received", "type", e.Type, "name", e.Name)
 		}
 	}
