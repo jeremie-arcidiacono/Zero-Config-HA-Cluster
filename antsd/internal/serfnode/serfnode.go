@@ -1,10 +1,12 @@
 package serfnode
 
 import (
+	"antsd/internal/discovery"
 	"context"
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"antsd/internal/config"
 
@@ -91,6 +93,23 @@ func (node *Node) Start(ctx context.Context) (<-chan Event, error) {
 		return nil, err
 	}
 	node.serf = serf
+
+	// Start the mDNS discovery process
+	discoverer := discovery.New(discovery.Config{
+		ClusterName:   "antsd-cluster", // TODO: expose this in config ?
+		NodeName:      serf.Memberlist().LocalNode().Name,
+		BindIP:        serf.Memberlist().LocalNode().Addr,
+		BindPort:      node.config.SerfBindPort,
+		QueryInterval: 5 * time.Second,
+	}, node.logger, func(addr string) {
+		if err := node.Join([]string{addr}); err != nil {
+			node.logger.Error("failed to join discovered peer", "addr", addr, "error", err)
+		}
+	})
+
+	if err := discoverer.Start(ctx); err != nil {
+		return nil, fmt.Errorf("failed to start mdns discovery: %w", err)
+	}
 
 	go node.loop(ctx)
 
