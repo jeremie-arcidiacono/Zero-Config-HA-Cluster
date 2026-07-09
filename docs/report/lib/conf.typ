@@ -101,7 +101,7 @@
   grid(
     columns: (1fr, 1fr),
     align: (left, right),
-    image("/assets/logos/logo-hepia.svg", width: 66%), image("/assets/logos/logo-hes-so-ge.svg", width: 66%),
+    image("../assets/logos/logo-hepia.svg", width: 66%), image("../assets/logos/logo-hes-so-ge.svg", width: 66%),
   )
 
   align(center + horizon, [
@@ -357,6 +357,6 @@
   }
 
   if bibliography-bytes != none {
-    bibliography(bibliography-bytes, style: "/assets/styles/" + bibliography-style, title: [Références documentaires])
+    bibliography(bibliography-bytes, style: "../assets/styles/" + bibliography-style, title: [Références documentaires])
   }
 }

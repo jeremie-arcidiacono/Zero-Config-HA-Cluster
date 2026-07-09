@@ -1,0 +1,25 @@
+---
+config:
+  flowchart:
+    htmlLabels: false
+  htmlLabels: false
+---
+flowchart TD
+    A([Nœud démarre]) --> B[Lecture adresse MAC pour construction de l'ID unique]
+    B --> C[Démarrage de antsd et Serf]
+    C --> D[Serf effectue la découverte via mDNS + démarrage du timer]
+    D -- Nouveau membre détecté = reset du timer --> D
+%%    D --> E{Nouveaux membres détectés ?}
+%%    E -- Non, attente --> D
+%%    E -- Oui, reset du timer --> D
+    D --> F[Timer expire]
+    F --> G[Serf Query : existe-t-il des nodes en état stable ?]
+    G -- Oui: cluster existant --> I[Lire le nombre de node en état stable-server]
+    I --> J{Nb node en état stable-server < 3 ?}
+    J -- Oui --> K[Installation de  k3s server]
+    J -- Non --> L[Installation de  k3s agent]
+    G -- Non: aucun cluster --> M{Serf Query : existe-t-il des nodes en état bootstrap-waiting ?}
+    M -- Oui --> P[On passe en mode bootstrap-waiting]
+    M -- Non --> N[On déclenche le processus de bootstrapping:  on broadcast l'info et on passe en mode bootstrap-waiting]
+    style P fill: #f2ce81ff, color: #000
+    style N fill: #f2ce81ff, color: #000

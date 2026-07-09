@@ -1,4 +1,4 @@
-#import "/lib/lib.typ" as hepia
+#import "lib/lib.typ" as hepia
 #import "@preview/acrostiche:0.7.0": *
 #import "globals.typ": urls
 
@@ -17,7 +17,7 @@
     [ANTS A.I. Systems],
   ),
   illustration: (
-    illustration: image("/assets/images/main-project-illustration.jpg"),
+    illustration: image("assets/images/main-project-illustration.jpg"),
     legend-source: [
       Ensemble de serveurs interconnectés représentant un système distribué.
       Source : #hepia.source_url(urls, 0)
@@ -27,7 +27,7 @@
     #highlight("TODO")
   ],
   abstract-illustration: image(
-    "/assets/images/main-project-illustration.jpg",
+    "assets/images/main-project-illustration.jpg",
     alt: "Ensemble de serveurs interconnectés représentant un système distribué",
     height: 25%
     ),
@@ -48,3 +48,9 @@
   appendixes: (),
   bibliography-bytes: read("bibliography.bib", encoding: none)
 )
+
+#include("contents/1_context.typ")
+#include("contents/2_conception.typ")
+#include("contents/3_implementation.typ")
+#include("contents/4_security.typ")
+#include("contents/5_results.typ")

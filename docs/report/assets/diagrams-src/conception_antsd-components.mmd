@@ -1,0 +1,33 @@
+---
+config:
+  flowchart:
+    htmlLabels: false
+  htmlLabels: false
+  theme: base
+  themeVariables:
+    edgeLabelBackground: "#c385ff"
+---
+flowchart TB
+    Client((Requêtes externes HTTP))
+    ReseauSerf((Autres instances Serf sur le réseau))
+    ServiceK3s((Service local K3s))
+
+    subgraph antsd [antsd]
+        direction TB
+        API[Points d'accès HTTP Contrôle et Monitoring]
+        ClusterMgr[Gestionnaire de Cluster Logique décisionnelle centrale]
+        K3sMod[Module de Communication K3s]
+        SerfWrap[Instance Serf]
+        Store[(Persistance locale StateStore)]
+
+        API -->|Commandes| ClusterMgr
+        SerfWrap <-->|Événements et requêtes| ClusterMgr
+        ClusterMgr -->|Mises à jour des tags| SerfWrap
+        ClusterMgr -->|Instructions de configuration| K3sMod
+        ClusterMgr <-->|Lecture/Écriture| Store
+    end
+
+    Client --> API
+    SerfWrap <--> ReseauSerf
+    K3sMod <--> ServiceK3s
+    

@@ -1,0 +1,22 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Client final" as Client
+
+usecase "Brancher l'alimentation\net le réseau" as UC_Brancher
+usecase "Accéder à l'application\nWeb finale" as UC_Web
+
+rectangle "Système autonome (ants-os)" {
+  usecase "Découvrir les nœuds\n(Serf)" as UC_Decouverte
+  usecase "Former la grappe\n(K3s)" as UC_Grappe
+}
+
+Client --> UC_Brancher
+Client --> UC_Web
+
+UC_Brancher .> UC_Decouverte : << déclenche >>
+UC_Decouverte .> UC_Grappe : << entraîne >>
+UC_Grappe .> UC_Web : << rend possible >>
+
+@enduml
