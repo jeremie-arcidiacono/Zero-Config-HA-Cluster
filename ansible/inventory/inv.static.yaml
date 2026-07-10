@@ -1,0 +1,14 @@
+all:
+  hosts:
+    ants01:
+      ansible_host: 10.10.9.24
+    ants02:
+      ansible_host: 10.10.9.28
+    ants03:
+      ansible_host: 10.10.9.31
+    ants04:
+      ansible_host: 10.10.9.73
+    ants05:
+      ansible_host: 10.10.9.152
+    ants06:
+      ansible_host: 10.10.9.158
