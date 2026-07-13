@@ -1,0 +1,22 @@
+[Unit]
+Description=ANTS Daemon:  Serf-based cluster management agent
+Documentation=https://github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster
+After=network-online.target
+Wants=network-online.target
+
+# Do not start if the binary is not present yet
+# (useful during development)
+ConditionPathExists=/usr/local/bin/antsd
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/bin/antsd
+
+#Restart=on-failure
+Restart=no # TODO : useful during development, use better strategy later
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

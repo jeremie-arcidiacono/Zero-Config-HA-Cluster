@@ -1,0 +1,45 @@
+---
+- name: Deploy ants-daemon
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    antsd_src_dir: "{{ playbook_dir }}/../../antsd"
+    antsd_binary_src: "{{ playbook_dir }}/files/antsd/go_build_antsd_ARM64_linux"
+    antsd_binary_dest: /usr/local/bin/antsd
+  pre_tasks:
+    - name: Build antsd binary for ARM64 Linux # noqa: run-once[task]
+      ansible.builtin.command:
+        cmd: go build -o {{ antsd_binary_src }} ./cmd/antsd
+        chdir: "{{ antsd_src_dir }}"
+      environment:
+        GOOS: linux
+        GOARCH: arm64
+      delegate_to: localhost
+      become: false
+      run_once: true
+      changed_when: true
+
+  tasks:
+    - name: Deploy antsd binary
+      ansible.builtin.copy:
+        src: "{{ antsd_binary_src }}"
+        dest: "{{ antsd_binary_dest }}"
+        owner: root
+        group: root
+        mode: '0755'
+      notify: Restart antsd
+
+    - name: Force restart antsd
+      ansible.builtin.systemd_service:
+        name: antsd
+        state: restarted
+      tags:
+        - force-restart
+        - never
+
+  handlers:
+    - name: Restart antsd
+      ansible.builtin.systemd_service:
+        name: antsd
+        state: restarted

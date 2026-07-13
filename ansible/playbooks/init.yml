@@ -1,0 +1,39 @@
+---
+- name: Setup Raspberry Pis
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    antsd_service_src: "{{ playbook_dir }}/files/antsd/antsd.service"
+    antsd_service_dest: /etc/systemd/system/antsd.service
+  tasks:
+    # We use shell instead of builtin.hostname and builtin.lineinfile because we got issue with privilege escalation between the two tasks.
+    # The shell command is a workaround to update the hostname and /etc/hosts in one task.
+    - name: Set hostname
+      ansible.builtin.shell: |
+        if [ "$(hostname)" != "{{ inventory_hostname }}" ]; then
+          sed -i 's/^127\.0\.1\.1.*/127.0.1.1\t{{ inventory_hostname }}/' /etc/hosts
+          hostnamectl set-hostname {{ inventory_hostname }}
+          echo "changed"
+        fi
+      register: hostname_update
+      changed_when: hostname_update.stdout == "changed"
+
+    - name: Deploy antsd systemd unit
+      ansible.builtin.copy:
+        src: "{{ antsd_service_src }}"
+        dest: "{{ antsd_service_dest }}"
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Reload systemd daemon
+
+    - name: Enable antsd service
+      ansible.builtin.systemd_service:
+        name: antsd
+        enabled: true
+
+  handlers:
+    - name: Reload systemd daemon
+      ansible.builtin.systemd_service:
+        daemon_reload: true

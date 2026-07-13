@@ -1,0 +1,2 @@
+# antsd binary
+go_build_antsd_ARM64_linux
