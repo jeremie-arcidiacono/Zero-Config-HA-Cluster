@@ -2,11 +2,11 @@
 package cluster
 
 import (
+	"antsd/internal/config"
+	"antsd/internal/monitor"
 	"antsd/internal/serfnode"
 	"context"
 	"log/slog"
-
-	"antsd/internal/config"
 )
 
 // Manager is the central orchestrator of antsd. It owns the lifecycle of the node: Serf membership, K3s control, ...
@@ -34,7 +34,15 @@ func (m *Manager) Run(ctx context.Context) error {
 	}
 
 	// TODO: check persisted state ?
-	// TODO: start HTTP API ?
+
+	monitoringServer, err := monitor.NewServer(m.config.HTTPPort, m.serf, m.logger)
+	if err != nil {
+		return err
+	}
+
+	if err := monitoringServer.Start(ctx); err != nil {
+		return err
+	}
 
 	for {
 		select {

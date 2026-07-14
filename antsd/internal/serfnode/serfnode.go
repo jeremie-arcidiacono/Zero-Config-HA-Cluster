@@ -2,10 +2,15 @@ package serfnode
 
 import (
 	"antsd/internal/discovery"
+	"antsd/internal/monitor"
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
+	"sort"
+	"strconv"
+	"sync"
 	"time"
 
 	"antsd/internal/config"
@@ -49,9 +54,9 @@ func (t EventType) String() string {
 type Event struct {
 	Type   EventType
 	NodeIP string
-	// NodePort ??
 	Name   string
 	Tags   map[string]string
+	// NodePort ??
 	// Status ??
 }
 
@@ -59,6 +64,8 @@ type Node struct {
 	config *config.Config
 	logger *slog.Logger
 
+	mu         sync.RWMutex
+	name       string
 	serf       *serflib.Serf
 	rawEventCh chan serflib.Event
 	eventCh    chan Event
@@ -92,7 +99,11 @@ func (node *Node) Start(ctx context.Context) (<-chan Event, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	node.mu.Lock()
 	node.serf = serf
+	node.name = conf.NodeName
+	node.mu.Unlock()
 
 	// Start the mDNS discovery process
 	discoverer := discovery.New(discovery.Config{
@@ -174,10 +185,14 @@ func mapMemberEventType(t serflib.EventType) EventType {
 
 // Join attempts to join the cluster via the given peer addresses.
 func (node *Node) Join(addrs []string) error {
-	if node.serf == nil {
+	node.mu.RLock()
+	serf := node.serf
+	node.mu.RUnlock()
+
+	if serf == nil {
 		return nil
 	}
-	n, err := node.serf.Join(addrs, true)
+	n, err := serf.Join(addrs, true)
 	if err != nil {
 		node.logger.Warn("serf join partially failed", "joined", n, "error", err)
 	}
@@ -186,8 +201,70 @@ func (node *Node) Join(addrs []string) error {
 
 // Leave gracefully leaves the cluster.
 func (node *Node) Leave() error {
-	if node.serf == nil {
+	node.mu.RLock()
+	serf := node.serf
+	node.mu.RUnlock()
+
+	if serf == nil {
 		return nil
 	}
-	return node.serf.Leave()
+	return serf.Leave()
+}
+
+// UpdateTags updates the Serf node tags
+func (node *Node) UpdateTags(tags map[string]string) error {
+	node.mu.RLock()
+	serf := node.serf
+	node.mu.RUnlock()
+
+	if serf == nil {
+		return nil
+	}
+
+	// Always set the special "state" tag
+	// TODO : remove the hard-coded value and use the not-implemented yet state machine instead
+	tags["state"] = "starting"
+
+	return serf.SetTags(tags)
+}
+
+// Snapshot returns the current local Serf observation for monitoring and observability purposes.
+func (node *Node) Snapshot() monitor.Snapshot {
+	node.mu.RLock()
+	serf := node.serf
+	nodeName := node.name
+	node.mu.RUnlock()
+
+	snapshot := monitor.Snapshot{
+		CollectedAt: time.Now(),
+		NodeName:    nodeName,
+	}
+
+	if serf == nil {
+		return snapshot
+	}
+
+	members := serf.Members()
+	snapshot.Available = true
+	snapshot.Members = make([]monitor.Member, 0, len(members))
+
+	for _, member := range members {
+		tags := make(map[string]string, len(member.Tags))
+		for key, value := range member.Tags {
+			tags[key] = value
+		}
+
+		snapshot.Members = append(snapshot.Members, monitor.Member{
+			Name:    member.Name,
+			Address: net.JoinHostPort(member.Addr.String(), strconv.Itoa(int(member.Port))),
+			Status:  member.Status.String(),
+			Tags:    tags,
+		})
+	}
+
+	sort.Slice(snapshot.Members, func(i, j int) bool {
+		return snapshot.Members[i].Name < snapshot.Members[j].Name
+	})
+
+	return snapshot
 }
