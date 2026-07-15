@@ -1,10 +1,10 @@
-// Package monitor provides an HTTP server for system monitoring, observability, and control.
+// Package admin provides an HTTP server for system monitoring, observability, and control.
 //
 // It exposes three endpoints:
 //   - GET / renders an HTML dashboard
 //   - GET /health returns a simple health check
 //   - GET /status returns cluster snapshot as JSON
-package monitor
+package admin
 
 import (
 	"context"
@@ -70,7 +70,7 @@ type Source interface {
 	Snapshot() Snapshot
 }
 
-// Server exposes the monitoring HTTP interface.
+// Server exposes the administration HTTP interface.
 type Server struct {
 	logger   *slog.Logger
 	source   Source
@@ -118,11 +118,11 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("listen on %s: %w", s.server.Addr, err)
 	}
 
-	s.logger.Info("monitoring server started", "address", listener.Addr())
+	s.logger.Info("admin server started", "address", listener.Addr())
 
 	go func() {
 		if err := s.server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			s.logger.Error("monitoring server stopped unexpectedly", "error", err)
+			s.logger.Error("admin server stopped unexpectedly", "error", err)
 		}
 	}()
 
@@ -134,7 +134,7 @@ func (s *Server) Start(ctx context.Context) error {
 		defer cancel()
 
 		if err := s.server.Shutdown(shutdownCtx); err != nil {
-			s.logger.Warn("monitoring server shutdown failed", "error", err)
+			s.logger.Warn("admin server shutdown failed", "error", err)
 		}
 	}()
 

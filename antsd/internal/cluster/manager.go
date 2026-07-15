@@ -2,8 +2,8 @@
 package cluster
 
 import (
+	"antsd/internal/admin"
 	"antsd/internal/config"
-	"antsd/internal/monitor"
 	"antsd/internal/serfnode"
 	"context"
 	"log/slog"
@@ -35,12 +35,12 @@ func (m *Manager) Run(ctx context.Context) error {
 
 	// TODO: check persisted state ?
 
-	monitoringServer, err := monitor.NewServer(m.config.HTTPPort, m.serf, m.logger)
+	adminServer, err := admin.NewServer(m.config.HTTPPort, m.serf, m.logger)
 	if err != nil {
 		return err
 	}
 
-	if err := monitoringServer.Start(ctx); err != nil {
+	if err := adminServer.Start(ctx); err != nil {
 		return err
 	}
 

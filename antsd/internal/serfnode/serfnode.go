@@ -1,8 +1,8 @@
 package serfnode
 
 import (
+	"antsd/internal/admin"
 	"antsd/internal/discovery"
-	"antsd/internal/monitor"
 	"context"
 	"fmt"
 	"log/slog"
@@ -229,13 +229,13 @@ func (node *Node) UpdateTags(tags map[string]string) error {
 }
 
 // Snapshot returns the current local Serf observation for monitoring and observability purposes.
-func (node *Node) Snapshot() monitor.Snapshot {
+func (node *Node) Snapshot() admin.Snapshot {
 	node.mu.RLock()
 	serf := node.serf
 	nodeName := node.name
 	node.mu.RUnlock()
 
-	snapshot := monitor.Snapshot{
+	snapshot := admin.Snapshot{
 		CollectedAt: time.Now(),
 		NodeName:    nodeName,
 	}
@@ -246,7 +246,7 @@ func (node *Node) Snapshot() monitor.Snapshot {
 
 	members := serf.Members()
 	snapshot.Available = true
-	snapshot.Members = make([]monitor.Member, 0, len(members))
+	snapshot.Members = make([]admin.Member, 0, len(members))
 
 	for _, member := range members {
 		tags := make(map[string]string, len(member.Tags))
@@ -254,7 +254,7 @@ func (node *Node) Snapshot() monitor.Snapshot {
 			tags[key] = value
 		}
 
-		snapshot.Members = append(snapshot.Members, monitor.Member{
+		snapshot.Members = append(snapshot.Members, admin.Member{
 			Name:    member.Name,
 			Address: net.JoinHostPort(member.Addr.String(), strconv.Itoa(int(member.Port))),
 			Status:  member.Status.String(),
