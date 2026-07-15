@@ -86,6 +86,11 @@
     at {{ .CollectedAt.Format "2006-01-02 15:04:05 MST" }}.
 </p>
 
+<p class="meta">
+    antsd started at {{ .StartedAt.Format "2006-01-02 15:04:05 MST" }}
+    (uptime {{ .Uptime }}).
+</p>
+
 {{ if .Available }}
 <p><span class="status available">Serf available</span> {{ len .Members }} member(s) observed.</p>
 {{ else }}
