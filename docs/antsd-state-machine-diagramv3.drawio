@@ -1,0 +1,125 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="lYq1LvttR6xjcSmEOax2" name="Page-1">
+    <mxGraphModel dx="1658" dy="996" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="start" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#1e4d78;fontColor=#ffffff;strokeColor=#1e4d78;fontStyle=1;fontSize=13;" value="START" vertex="1">
+          <mxGeometry height="50" width="100" x="760" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="starting" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" value="starting" vertex="1">
+          <mxGeometry height="50" width="150" x="735" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="pcheck" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;" value="État persisté ?" vertex="1">
+          <mxGeometry height="80" width="200" x="710" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="init_bg" parent="1" style="swimlane;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=13;startSize=30;" value="Premier démarrage" vertex="1">
+          <mxGeometry height="100" width="280" x="365" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="bootstrap" parent="init_bg" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="BOOTSTRAP&lt;br&gt;(détaillé&amp;nbsp;&lt;span class=&quot;kY2IgmnCmOGjharHErah N56cWZpP8cNJu1dqgCxB&quot; style=&quot;-webkit-line-clamp: 3;&quot;&gt;&lt;span&gt;ailleurs&lt;/span&gt;&lt;/span&gt;)" vertex="1">
+          <mxGeometry height="50" width="160" x="60" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="rejoin" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" value="rejoin_cluster" vertex="1">
+          <mxGeometry height="50" width="160" x="920" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="ops_bg" parent="1" style="swimlane;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=13;startSize=30;" value="Opération" vertex="1">
+          <mxGeometry height="180" width="500" x="365" y="500" as="geometry" />
+        </mxCell>
+        <mxCell id="stable_server" parent="ops_bg" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" value="stable_server" vertex="1">
+          <mxGeometry height="70" width="160" x="50" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="stable_agent" parent="ops_bg" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" value="stable_agent" vertex="1">
+          <mxGeometry height="70" width="160" x="290" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="rescaling_bg" parent="1" style="swimlane;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;fontSize=13;startSize=30;" value="Rescaling" vertex="1">
+          <mxGeometry height="200" width="380" x="955" y="500" as="geometry" />
+        </mxCell>
+        <mxCell id="scaling_up" parent="rescaling_bg" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="scaling_up&#xa;drain → delete node → restart k3s server" vertex="1">
+          <mxGeometry height="55" width="280" x="50" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="scaling_down" parent="rescaling_bg" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="scaling_down&#xa;drain → delete node → etcdctl remove → restart k3s agent" vertex="1">
+          <mxGeometry height="55" width="280" x="50" y="115" as="geometry" />
+        </mxCell>
+        <mxCell id="reboot_bg" parent="1" style="swimlane;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=13;startSize=30;" value="Reboot" vertex="1">
+          <mxGeometry height="110" width="280" x="365" y="750" as="geometry" />
+        </mxCell>
+        <mxCell id="rebooting" parent="reboot_bg" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" value="rebooting" vertex="1">
+          <mxGeometry height="55" width="160" x="60" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="decomm_bg" parent="1" style="swimlane;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;fontSize=13;startSize=30;" value="Décommission" vertex="1">
+          <mxGeometry height="110" width="280" x="710" y="750" as="geometry" />
+        </mxCell>
+        <mxCell id="decommissioning" parent="decomm_bg" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" value="decommissioning" vertex="1">
+          <mxGeometry height="55" width="180" x="50" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="end_r" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#1e4d78;fontColor=#ffffff;strokeColor=#1e4d78;fontStyle=1;fontSize=13;" value="END" vertex="1">
+          <mxGeometry height="50" width="100" x="455" y="910" as="geometry" />
+        </mxCell>
+        <mxCell id="end_d" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#1e4d78;fontColor=#ffffff;strokeColor=#1e4d78;fontStyle=1;fontSize=13;" value="END" vertex="1">
+          <mxGeometry height="50" width="100" x="800" y="910" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="start" target="starting">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="starting" target="pcheck">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="pcheck" style="exitX=0.25;exitY=1;exitDx=0;exitDy=0;" target="init_bg" value="Aucun état&#xa;(premier démarrage)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="pcheck" style="exitX=0.75;exitY=1;exitDx=0;exitDy=0;" target="rejoin" value="État trouvé&#xa;(reboot / crash)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="init_bg" style="" target="ops_bg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="rejoin" style="entryX=0.75;entryY=0;entryDx=0;entryDy=0;" target="ops_bg">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="stable_agent" target="scaling_up" value="Serf event: rescaling_needed">
+          <mxGeometry relative="1" x="-0.0468" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="885" y="580" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="scaling_up" target="stable_server">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="805" y="540" />
+              <mxPoint x="685" y="540" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="stable_server" target="scaling_down" value="Serf event: rescaling_needed">
+          <mxGeometry relative="1" x="0.0032" y="-10" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="685" y="650" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12" edge="1" parent="1" source="scaling_down" target="stable_agent">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" edge="1" parent="1" source="ops_bg" style="exitX=0.25;exitY=1;exitDx=0;exitDy=0;entryX=0.451;entryY=0.002;entryDx=0;entryDy=0;entryPerimeter=0;" target="reboot_bg" value="Arrêt OS / reboot">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e15" edge="1" parent="1" source="rebooting" target="end_r" value="persistance état → serf.Leave()">
+          <mxGeometry relative="1" x="-0.0003" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e16" edge="1" parent="1" source="ops_bg" style="exitX=0.75;exitY=1;exitDx=0;exitDy=0;entryX=0.108;entryY=-0.03;entryDx=0;entryDy=0;entryPerimeter=0;" target="decomm_bg" value="POST /decommission">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e18" edge="1" parent="1" source="decommissioning" target="end_d" value="kubectl delete node → effacement état → serf.Leave()">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
