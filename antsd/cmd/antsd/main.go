@@ -8,9 +8,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 func main() {
+	startedAt := time.Now()
+
 	// temporary logger for early startup messages (before config is loaded)
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
@@ -28,7 +31,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	mgr := cluster.New(conf, logger)
+	mgr := cluster.New(conf, logger, startedAt)
 	if err := mgr.Run(ctx); err != nil {
 		logger.Error("exited with error", "error", err)
 		os.Exit(1)

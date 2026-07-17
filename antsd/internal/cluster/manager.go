@@ -2,11 +2,12 @@
 package cluster
 
 import (
+	"antsd/internal/admin"
+	"antsd/internal/config"
 	"antsd/internal/serfnode"
 	"context"
 	"log/slog"
-
-	"antsd/internal/config"
+	"time"
 )
 
 // Manager is the central orchestrator of antsd. It owns the lifecycle of the node: Serf membership, K3s control, ...
@@ -14,15 +15,19 @@ type Manager struct {
 	config *config.Config
 	logger *slog.Logger
 
+	// startedAt is the antsd process start time, used to report uptime.
+	startedAt time.Time
+
 	serf *serfnode.Node
 }
 
 // New creates a new Manager with the given configuration.
-func New(config *config.Config, logger *slog.Logger) *Manager {
+func New(config *config.Config, logger *slog.Logger, startedAt time.Time) *Manager {
 	return &Manager{
-		config: config,
-		logger: logger,
-		serf:   serfnode.New(config, logger),
+		config:    config,
+		logger:    logger,
+		startedAt: startedAt,
+		serf:      serfnode.New(config, logger),
 	}
 }
 
@@ -34,7 +39,15 @@ func (m *Manager) Run(ctx context.Context) error {
 	}
 
 	// TODO: check persisted state ?
-	// TODO: start HTTP API ?
+
+	adminServer, err := admin.NewServer(m.config.HTTPPort, m.serf, m.logger, m.startedAt)
+	if err != nil {
+		return err
+	}
+
+	if err := adminServer.Start(ctx); err != nil {
+		return err
+	}
 
 	for {
 		select {

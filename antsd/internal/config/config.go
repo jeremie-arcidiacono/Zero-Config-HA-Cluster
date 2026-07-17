@@ -40,7 +40,7 @@ func Load() (*Config, error) {
 
 	flag.StringVar(&c.SerfBindAddr, "serf-bind-addr", envOr("ANTSD_SERF_BIND_ADDR", defaultSerfBindAddr), "Serf bind address")
 	flag.IntVar(&c.SerfBindPort, "serf-bind-port", envOrInt("ANTSD_SERF_BIND_PORT", defaultSerfBindPort), "Serf bind port")
-	flag.IntVar(&c.HTTPPort, "http-port", envOrInt("ANTSD_HTTP_PORT", defaultHTTPPort), "HTTP API (monitoring and control) port")
+	flag.IntVar(&c.HTTPPort, "http-port", envOrInt("ANTSD_HTTP_PORT", defaultHTTPPort), "HTTP administration (monitoring and control) port")
 	flag.StringVar(&c.StateFilePath, "state-file", envOr("ANTSD_STATE_FILE", defaultStateFile), "Path to persistent state file")
 	flag.StringVar(&c.LogLevel, "log-level", envOr("ANTSD_LOG_LEVEL", defaultLogLevel), "Log level (debug, info, warn, error)")
 
