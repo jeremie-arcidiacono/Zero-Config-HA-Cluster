@@ -23,7 +23,7 @@ Cette base a permis de définir les besoins et les contraintes du projet, et d'i
 La réalisation de ce projet s'est déroulée en plusieurs étapes. Elle a d'abord commencé par la reprise du travail préparatoire du projet de semestre@arcidiacono_systeme_2026, afin de consolider les choix déjà posés et de revoir les besoins du système. Ensuite, une partie importante du travail a consisté à préciser l'architecture cible et à définir le comportement attendu des différents composants.
 
 #highlight("TODO: modif en fonction de la suite")
-À partir de là, le développement a porté sur la mise en place du logiciel, en particulier antsd et son intégration avec Serf et K3s. Cette base a ensuite servi à construire le prototype sur Raspberry Pi, à vérifier le comportement du système dans des cas simples puis dans des cas de panne. Enfin, une attention particulière a été portée sur la sécurisation du système.
+À partir de là, le développement a porté sur la mise en place du logiciel, en particulier antsd (le daemon conçu durant ce travail, qui s'exécute sur chaque machine et automatise la formation puis le maintien du cluster) et son intégration avec Serf et K3s. Cette base a ensuite servi à construire le prototype sur Raspberry Pi, à vérifier le comportement du système dans des cas simples puis dans des cas de panne. Enfin, une attention particulière a été portée sur la sécurisation du système.
 Durant toute la durée du projet, des réunions de suivi ont été régulièrement organisées avec le professeur responsable, M. Florent Glück.
 
 La majorité des sources utilisées sont issues de documentations officielles des outils étudiés ainsi que de leurs codes sources publiés sur GitHub.
