@@ -27,6 +27,7 @@ La réalisation de ce projet s'est déroulée en plusieurs étapes. Elle a d'abo
 Durant toute la durée du projet, des réunions de suivi ont été régulièrement organisées avec le professeur responsable, M. Florent Glück.
 
 La majorité des sources utilisées sont issues de documentations officielles des outils étudiés ainsi que de leurs codes sources publiés sur GitHub.
+Concernant les illustrations, sauf mention explicite d'une source sous la figure, toutes les figures et tous les diagrammes de ce document ont été réalisés par l'auteur.
 
 Différents modèles d'IA conversationnels (notamment Gemini et Claude via la plateforme Perplexity) ont été utilisés durant ce projet afin de gagner en efficacité.
 Ils ont été sollicités pour générer de la documentation technique à partir de code source, pour reformuler certains passages de ce mémoire, ou encore pour accélérer le développement logiciel.

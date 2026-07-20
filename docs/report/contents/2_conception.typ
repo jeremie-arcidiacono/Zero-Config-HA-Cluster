@@ -16,7 +16,6 @@
 
 #hepia.sourced_figure(
   caption: [Diagramme de cas d'utilisation],
-  source: [Réalisé par Jérémie Arcidiacono],
   label: <fig_conception_use-case>,
   image("../assets/diagrams/conception_use-case.svg"),
 )
@@ -32,7 +31,6 @@ Un mécanisme de redimensionnement dynamique est prévu afin de promouvoir ou r�
 
 #hepia.sourced_figure(
   caption: [Architecture d'une machine dans le cluster],
-  source: [Réalisé par Jérémie Arcidiacono],
   label: <fig_conception_layers>,
   image("../assets/diagrams/conception_layers.svg"),
 )
@@ -67,7 +65,6 @@ En pratique, ants-os ne fait pas la logique du cluster. Il prépare simplement u
 
 #hepia.sourced_figure(
   caption: [Diagramme de composants du daemon ants],
-  source: [Réalisé par Jérémie Arcidiacono],
   label: <fig_conception_antsd-components>,
   image("../assets/diagrams/conception_antsd-components.svg"),
 )
@@ -98,7 +95,6 @@ La #ref(<fig_conception_bootstrap-discovery>) illustre cette première phase de 
 
 #hepia.sourced_figure(
   caption: [Décision au premier démarrage d'une machine],
-  source: [Réalisé par Jérémie Arcidiacono],
   label: <fig_conception_bootstrap-discovery>,
   image("../assets/diagrams/conception_bootstrap-discovery.svg"),
 )
@@ -111,7 +107,6 @@ La #ref(<fig_conception_bootstrap-sequence>) détaille cette deuxième partie du
 
 #hepia.sourced_figure(
   caption: [Séquence du mécanisme de bootstrapping],
-  source: [Réalisé par Jérémie Arcidiacono],
   label: <fig_conception_bootstrap-sequence>,
   image("../assets/diagrams/conception_bootstrap-sequence.svg"),
 )
@@ -124,7 +119,6 @@ Le comportement de antsd tout au long du cycle de vie de la machine est représe
 
 #hepia.sourced_figure(
   caption: [Diagramme de cycle de vie d'une machine],
-  source: [Réalisé par Jérémie Arcidiacono],
   label: <fig_conception_antsd-state-machine>,
   image("../assets/diagrams/conception_antsd-state-machine.svg"),
 )
