@@ -69,7 +69,12 @@ même espace réseau et de stockage.
 === K3s
 
 K3s@k3s_k3s_2026 est une distribution légère de Kubernetes développée par Rancher (Suse) sous la licence Apache 2.0.
-Elle est conçue pour fonctionner sur des machines aux ressources matérielles limitées, notamment dans des contextes
+Ce point explique la possibilité d'exploitation commerciale de la solution par ANTS A.I. Systems.
+Cette licence permissive autorise l'utilisation, la modification et la redistribution du logiciel, y compris au sein d'un produit commercial et sans obligation de publier les modifications apportées.
+Les seules obligations sont de conserver les mentions de licence et de droits d'auteur, et de signaler les fichiers modifiés.
+Contrairement à une licence copyleft telle que la GPL, elle n'impose donc pas que le produit final soit lui-même distribué en source ouverte.
+
+K3s est conçu pour fonctionner sur des machines aux ressources matérielles limitées, notamment dans des contextes
 d'edge computing ou d'architectures ARM, tout en restant conforme à l'API Kubernetes standard.
 
 C'est la distribution retenue pour ce projet, en raison de sa faible consommation de ressources, de sa simplicité
