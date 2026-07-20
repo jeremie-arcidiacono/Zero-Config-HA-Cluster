@@ -87,9 +87,12 @@ Dans la suite de ce document, nous utiliserons la terminologie de K3s plutôt qu
 
 == Présentation de Serf <title-context-serf>
 
-Serf est l'outil retenu pour assurer la découverte des nœuds et la communication entre eux. Dans le mémoire du projet de semestre@arcidiacono_systeme_2026, ce sujet est détaillé plus largement dans la section consacrée à Serf. Ici, nous en gardons seulement les éléments utiles à la compréhension de la solution.
+Serf@hashicorp_hashicorpserf_2026 est l'outil retenu pour assurer la découverte des nœuds et la communication entre eux. Dans le mémoire du projet de semestre@arcidiacono_systeme_2026, ce sujet est détaillé plus largement dans la section consacrée à Serf. Ici, nous en gardons seulement les éléments utiles à la compréhension de la solution.
 
-Au cœur de Serf, nous retrouvons la bibliothèque Memberlist, qui gère le maintien de l'état du cluster via le protocole SWIM. Serf ajoute la couche d'orchestration manquante à Memberlist en complétant le système de gestion de l'appartenance avec la propagation d'événements arbitraires et l'exécution de requêtes/réponses (queries).
+Au cœur de Serf, nous retrouvons la bibliothèque Memberlist@hashicorp_hashicorpmemberlist_2026, qui gère l'appartenance au cluster et la détection de pannes en se basant sur une version modifiée du protocole #acr("SWIM")@wikipedia_swim_2026. 
+Ce dernier repose sur deux mécanismes distincts : la détection de pannes, assurée par un sondage périodique aléatoire (chaque nœud teste un membre choisi au hasard et, en cas de non-réponse, délègue ce test à quelques autres membres), et la diffusion des changements d'appartenance.
+Ces deux mécanismes étant entièrement décentralisés, le protocole reste efficace lorsque le nombre de nœuds augmente, sans introduire de point de défaillance unique.
+Serf ajoute la couche d'orchestration manquante à Memberlist en complétant le système de gestion de l'appartenance avec la propagation d'événements arbitraires et l'exécution de requêtes/réponses (queries).
 
 Contrairement à Consul, Serf ne s'intéresse pas à l'abstraction de services, mais bien à la gestion des nœuds. Ce point est important pour notre système, dont le rôle est avant tout de gérer l'infrastructure matérielle afin de préparer un environnement stable pour la couche haute, c'est-à-dire K3s.
 

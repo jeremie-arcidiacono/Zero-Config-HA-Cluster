@@ -41,6 +41,7 @@
     ],
   acronyms: (
     "HEPIA": ("Haute école du paysage, d'ingénierie et d'architecture"),
+    "SWIM": ("Scalable Weakly Consistent Infection-style Process Group Membership"),
   ),
   figures_urls: urls,
   introduction: include("contents/introduction.typ"),
