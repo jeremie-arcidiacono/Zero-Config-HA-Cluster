@@ -4,7 +4,7 @@
   become: true
   gather_facts: false
   vars:
-    antsd_service_src: "{{ playbook_dir }}/files/antsd/antsd.service"
+    antsd_service_src: antsd/antsd.service
     antsd_service_dest: /etc/systemd/system/antsd.service
   tasks:
     # We use shell instead of builtin.hostname and builtin.lineinfile because we got issue with privilege escalation between the two tasks.

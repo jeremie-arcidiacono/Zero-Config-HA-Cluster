@@ -15,7 +15,8 @@ Group=root
 ExecStart=/usr/local/bin/antsd
 
 #Restart=on-failure
-Restart=no # TODO : useful during development, use better strategy later
+# TODO : useful during development, use better strategy later
+Restart=no
 RestartSec=5s
 
 [Install]
