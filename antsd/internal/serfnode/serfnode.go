@@ -7,16 +7,23 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"os"
 	"sort"
 	"strconv"
 	"sync"
 	"time"
 
 	"antsd/internal/config"
+	nodepkg "antsd/internal/node"
 
 	serflib "github.com/hashicorp/serf/serf"
 )
+
+// clusterName scopes the mDNS discovery so unrelated clusters on the
+// same LAN do not merge. // TODO : expose it in config ?
+const clusterName = "antsd-cluster"
+
+// stateTagKey is the Serf tag carrying the node lifecycle state.
+const stateTagKey = "state"
 
 type EventType int
 
@@ -51,13 +58,18 @@ func (t EventType) String() string {
 	}
 }
 
+// Event is antsd's own representation of a Serf event.
+//
+// For member events, Name is the member's node name and Tags its tags.
+// For user events, Name is the event name and Payload its (possibly empty)
+// payload; NodeIP and Tags are unset (Serf user events carry no sender).
+// TODO : better to split nameNode and nameEvent ? or even make 2 structs for member and user events?
 type Event struct {
-	Type   EventType
-	NodeIP string
-	Name   string
-	Tags   map[string]string
-	// NodePort ??
-	// Status ??
+	Type    EventType
+	NodeIP  string
+	Name    string
+	Tags    map[string]string
+	Payload []byte
 }
 
 type Node struct {
@@ -86,13 +98,13 @@ func New(config *config.Config, logger *slog.Logger) *Node {
 func (node *Node) Start(ctx context.Context) (<-chan Event, error) {
 	conf := serflib.DefaultConfig()
 
-	conf.NodeName, _ = os.Hostname() // todo use better naming (derived from MAC address ?)
+	conf.NodeName = node.config.NodeName
 	conf.MemberlistConfig.BindAddr = node.config.SerfBindAddr
 	conf.MemberlistConfig.BindPort = node.config.SerfBindPort
 	conf.EventCh = node.rawEventCh
 
 	conf.Tags = map[string]string{
-		"state": "starting",
+		stateTagKey: string(nodepkg.StateStarting),
 	}
 
 	serf, err := serflib.Create(conf)
@@ -107,7 +119,7 @@ func (node *Node) Start(ctx context.Context) (<-chan Event, error) {
 
 	// Start the mDNS discovery process
 	discoverer := discovery.New(discovery.Config{
-		ClusterName:   "antsd-cluster", // TODO: expose this in config ?
+		ClusterName:   clusterName,
 		NodeName:      serf.Memberlist().LocalNode().Name,
 		BindIP:        serf.Memberlist().LocalNode().Addr,
 		BindPort:      node.config.SerfBindPort,
@@ -146,20 +158,31 @@ func (node *Node) handleRawEvent(e serflib.Event) {
 	switch ev := e.(type) {
 	case serflib.MemberEvent:
 		for _, m := range ev.Members {
-			converted := Event{
+			node.dispatch(Event{
 				Type:   mapMemberEventType(ev.EventType()),
 				NodeIP: m.Addr.String(),
 				Name:   m.Name,
 				Tags:   m.Tags,
-			}
-			select {
-			case node.eventCh <- converted:
-			default:
-				node.logger.Warn("dropping Serf event, channel full", "event", converted)
-			}
+			})
 		}
+	case serflib.UserEvent:
+		node.dispatch(Event{
+			Type:    EventUser,
+			Name:    ev.Name,
+			Payload: ev.Payload,
+		})
 	default:
-		// ignore other event types for now
+		// ignore other event types (queries, ...) for now
+	}
+}
+
+// dispatch forwards a converted event to the consumer channel,
+// dropping it instead of blocking if the consumer lags behind.
+func (node *Node) dispatch(e Event) {
+	select {
+	case node.eventCh <- e:
+	default:
+		node.logger.Warn("dropping Serf event, channel full", "event", e)
 	}
 }
 
@@ -211,24 +234,55 @@ func (node *Node) Leave() error {
 	return serf.Leave()
 }
 
-// UpdateTags updates the Serf node tags
-func (node *Node) UpdateTags(tags map[string]string) error {
+// SetState broadcasts the node lifecycle state to the cluster by updating
+// the Serf "state" tag.
+func (node *Node) SetState(state nodepkg.State) error {
 	node.mu.RLock()
 	serf := node.serf
 	node.mu.RUnlock()
 
 	if serf == nil {
-		return nil
+		return fmt.Errorf("serf not started")
 	}
 
-	// Always set the special "state" tag
-	// TODO : remove the hard-coded value and use the not-implemented yet state machine instead
-	tags["state"] = "starting"
-
+	// Preserve any other tags: SetTags replaces the whole tag set.
+	current := serf.LocalMember().Tags
+	tags := make(map[string]string, len(current)+1)
+	for key, value := range current {
+		tags[key] = value
+	}
+	tags[stateTagKey] = string(state)
 	return serf.SetTags(tags)
 }
 
+// SendUserEvent broadcasts a Serf user event to the whole cluster,
+// including this node itself.
+func (node *Node) SendUserEvent(name string, payload []byte) error {
+	node.mu.RLock()
+	serf := node.serf
+	node.mu.RUnlock()
+
+	if serf == nil {
+		return fmt.Errorf("serf not started")
+	}
+	// coalesce=false: bootstrap protocol events should never be merged.
+	return serf.UserEvent(name, payload, false)
+}
+
+// LocalIP returns the IP address this node advertises to the cluster.
+func (node *Node) LocalIP() string {
+	node.mu.RLock()
+	serf := node.serf
+	node.mu.RUnlock()
+
+	if serf == nil {
+		return ""
+	}
+	return serf.LocalMember().Addr.String()
+}
+
 // Snapshot returns the current local Serf observation for monitoring and observability purposes.
+// todo : change comment, as now used for more thing that just monitoring ?
 func (node *Node) Snapshot() admin.Snapshot {
 	node.mu.RLock()
 	serf := node.serf

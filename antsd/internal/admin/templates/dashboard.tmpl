@@ -76,6 +76,43 @@
             font-family: ui-monospace, monospace;
             font-size: 0.85rem;
         }
+
+        .state {
+            display: inline-block;
+            padding: 0.25rem 0.6rem;
+            border-radius: 0.3rem;
+            font-weight: 600;
+            background: #e0f2fe;
+            color: #075985;
+            font-family: ui-monospace, monospace;
+        }
+
+        .actions {
+            margin: 1rem 0;
+            padding: 1rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.5rem;
+            background: #f9fafb;
+        }
+
+        .actions form {
+            display: inline-block;
+            margin-right: 0.5rem;
+        }
+
+        .actions button {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 0.3rem;
+            background: #1d4ed8;
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .actions button.secondary {
+            background: #6b7280;
+        }
     </style>
 </head>
 <body>
@@ -91,10 +128,31 @@
     (uptime {{ .Uptime }}).
 </p>
 
+<p>Node state: <span class="state">{{ .State }}</span></p>
+
 {{ if .Available }}
-<p><span class="status available">Serf available</span> {{ len .Members }} member(s) observed.</p>
+<p><span class="status available">Serf available</span> {{ len .Members }} machine(s) discovered (this node included).</p>
 {{ else }}
 <p><span class="status unavailable">Serf unavailable</span></p>
+{{ end }}
+
+{{/* First-boot actions, mirroring the physical screens A and C */}}
+{{ if eq .State "fb_discovering" }}
+<div class="actions">
+    <form method="post" action="/bootstrap">
+        <button type="submit">Create a new cluster</button>
+    </form>
+</div>
+{{ else if eq .State "fb_bootstrap_confirm" }}
+<div class="actions">
+    <p>When the number of discovered machines matches your machine count, confirm:</p>
+    <form method="post" action="/bootstrap/confirm">
+        <button type="submit">Confirm cluster creation</button>
+    </form>
+    <form method="post" action="/bootstrap/cancel">
+        <button type="submit" class="secondary">Back</button>
+    </form>
+</div>
 {{ end }}
 
 <h2>Members</h2>
