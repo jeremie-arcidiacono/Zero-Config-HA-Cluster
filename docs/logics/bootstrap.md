@@ -36,6 +36,9 @@ Ce qui nous donne les états suivants :
     - `fb_bootstrap_install_init` : la machine N0 installe la toute première instance de K3s
     - `fb_bootstrap_install_servers` : les machines N1 et N2 installent K3s en mode server, en rejoignant le cluster de
       N0
+    - `fb_bootstrap_install_agent` : les machines N3+ installent K3s en mode agent, en rejoignant le cluster de N0
+    - `fb_bootstrap_failed` : échec du processus de bootstrapping (ex : installation K3s en erreur), la machine ne
+      progresse plus
 
 Tous les états sont préfixés par "fb-" pour "first boot", afin de les différencier des états globaux du reste du cycle
 de vie d'antsd.
@@ -82,6 +85,13 @@ ont été découverts (plutot que de se baser sur un long timer).
 > Status : création d'un nouveau cluster...  
 > Nombre de machines découvertes : XX machines
 
+
+**Implémentation sur Pis** : l'écran physique étant inexistant, les boutons sont simulés par des endpoints HTTP :
+
+- `POST /bootstrap` = bouton de l'écran A (demande de création)
+- `POST /bootstrap/confirm` = bouton de confirmation de l'écran C
+- `POST /bootstrap/cancel` = bouton retour de l'écran C
+
 # Mécanisme de bootstrapping
 
 Le mécanisme de bootstrapping est une sous-étape qui est déclenchée lorsqu'une machine démarre pour la première
@@ -90,8 +100,22 @@ fois, et qu'elle n'a découvert aucun cluster existant.
 Dès qu'un dès node décide qu'il est nécéssaire de lancer le processus de bootstrapping, il en informe tous les autres
 par broadcast, et tous les nodes passe donc en fb_bootstrap_waiting.  
 En passant en mode fb_bootstrap_waiting, un timer local est démarré.  
-La première machine dont le timer expire (donc la première à etre passée en fb_bootstrap_waiting) informe tous les
-autres de passer en mode fb_bootstrap_install_init.
+La première machine dont le timer expire broadcast le signal de départ : chaque node calcule alors son rôle.  
+Seul N0 passe en fb_bootstrap_install_init, les autres restent en fb_bootstrap_waiting jusqu'au signal server-ready de
+N0.
+
+### Événements Serf du protocole
+
+Le protocole repose sur 3 user events Serf (broadcast à tout le monde, y compris l'émetteur ; les handlers sont
+idempotents : un événement reçu dans un état inattendu est ignoré, ce qui absorbe les doublons) :
+
+| Événement                   | Émetteur                            | Payload  | Effet                                                                       |
+|-----------------------------|-------------------------------------|----------|-----------------------------------------------------------------------------|
+| `antsd:bootstrap-requested` | le node dont l'utilisateur confirme | -        | tous les nodes en premier démarrage passent en `fb_bootstrap_waiting`       |
+| `antsd:bootstrap-start`     | 1er node dont le timer expire       | -        | chaque node calcule son rôle (rang dans la liste triée des membres vivants) |
+| `antsd:server-ready`        | N0, une fois son K3s prêt           | IP de N0 | N1/N2 installent K3s server ; les agents surveillent le quorum              |
+
+Le nombre de servers vaut `min(3, N)` : avec 1 ou 2 machines, il n'y a simplement pas d'agent.
 
 Ce diagramme montre le processus à partir de fb_bootstrap_install_init.
 
@@ -106,18 +130,20 @@ sequenceDiagram
     note over N0, Nx: Chaque nœud calcule son rôle selon sa position
     N0 ->> N0: Installation de k3s Server, en mode initialisation de cluster
     N0 ->> N0: Attendre que K3s soit prêt
-    N0 ->> N1: Serf Event(move to: fb_bootstrap_install_servers, N0ip: XXXX)
-    N0 ->> N2: Serf Event(move to: fb_bootstrap_install_servers, N0ip: XXXX)
-    N0 ->> Nx: Serf Event(move to: fb_bootstrap_install_servers, N0ip: XXXX)
+    N0 ->> N0: Passage en stable_server
+    N0 ->> N1: Serf Event(antsd:server-ready, N0ip: XXXX)
+    N0 ->> N2: Serf Event(antsd:server-ready, N0ip: XXXX)
+    N0 ->> Nx: Serf Event(antsd:server-ready, N0ip: XXXX)
 
     par N1 et N2 en parallèle
         N1 ->> N1: Installation de k3s Server, en rejoignant N0
         N2 ->> N2: Installation de k3s Server, en rejoignant N0
     end
 
-    N1 ->> N1: Broadcaster tag k3s_state=server
-    N2 ->> N2: Broadcaster tag k3s_state=server
-    note over N0, N2: Quorum etcd atteint - cluster HA opérationnel
+    N1 ->> N1: Passage en stable_server
+    N2 ->> N2: Passage en stable_server
+    note over N0, N2: Quorum etcd atteint: cluster HA opérationnel
+    note over Nx: Nx attend d'observer N membres en stable_server
     Nx ->> Nx: Installation de k3s Agent, en rejoignant N0
-    Nx ->> Nx: Broadcaster tag k3s_state=agent
+    Nx ->> Nx: Passage en stable_agent
 ```
