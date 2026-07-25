@@ -14,6 +14,8 @@ User=root
 Group=root
 ExecStart=/usr/local/bin/antsd
 
+EnvironmentFile=-/etc/antsd/antsd.env
+
 #Restart=on-failure
 # TODO : useful during development, use better strategy later
 Restart=no
