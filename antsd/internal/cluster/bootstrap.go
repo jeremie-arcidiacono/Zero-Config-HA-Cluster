@@ -12,12 +12,13 @@ package cluster
 // duplicates (e.g., two nodes broadcasting bootstrap-start almost simultaneously).
 
 import (
-	"antsd/internal/admin"
-	"antsd/internal/node"
-	"antsd/internal/serfnode"
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/admin"
+	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/node"
+	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/serfnode"
 )
 
 // bootstrapWaitDelay is the grace period spent in fb_bootstrap_waiting so

@@ -3,16 +3,17 @@
 package cluster
 
 import (
-	"antsd/internal/admin"
-	"antsd/internal/config"
-	"antsd/internal/k3s"
-	"antsd/internal/node"
-	"antsd/internal/serfnode"
 	"context"
 	"fmt"
 	"log/slog"
 	"sync/atomic"
 	"time"
+
+	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/admin"
+	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/config"
+	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/k3s"
+	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/node"
+	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/serfnode"
 )
 
 // serfAPI is the subset of serfnode.Node used by the Manager.

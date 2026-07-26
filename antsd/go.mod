@@ -1,4 +1,4 @@
-module antsd
+module github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd
 
 go 1.26
 

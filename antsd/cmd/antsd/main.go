@@ -1,14 +1,15 @@
 package main
 
 import (
-	"antsd/internal/cluster"
-	"antsd/internal/config"
 	"context"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/cluster"
+	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/config"
 )
 
 func main() {

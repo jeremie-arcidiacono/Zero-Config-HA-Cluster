@@ -1,8 +1,6 @@
 package serfnode
 
 import (
-	"antsd/internal/admin"
-	"antsd/internal/discovery"
 	"context"
 	"fmt"
 	"log/slog"
@@ -12,8 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"antsd/internal/config"
-	nodepkg "antsd/internal/node"
+	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/admin"
+	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/discovery"
+
+	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/config"
+	nodepkg "github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/node"
 
 	serflib "github.com/hashicorp/serf/serf"
 )
