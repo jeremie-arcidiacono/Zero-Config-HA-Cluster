@@ -12,6 +12,7 @@ import (
 
 	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/admin"
 	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/discovery"
+	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/logbridge"
 
 	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/config"
 	nodepkg "github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/node"
@@ -103,6 +104,11 @@ func (node *Node) Start(ctx context.Context) (<-chan Event, error) {
 	conf.MemberlistConfig.BindAddr = node.config.SerfBindAddr
 	conf.MemberlistConfig.BindPort = node.config.SerfBindPort
 	conf.EventCh = node.rawEventCh
+
+	conf.Logger = logbridge.NewQuietStdLogger(node.logger, "SERF")
+	conf.LogOutput = nil
+	conf.MemberlistConfig.Logger = logbridge.NewQuietStdLogger(node.logger, "MEMBERLIST")
+	conf.MemberlistConfig.LogOutput = nil
 
 	conf.Tags = map[string]string{
 		stateTagKey: string(nodepkg.StateStarting),

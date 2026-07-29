@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/hashicorp/mdns"
+
+	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/logbridge"
 )
 
 // PeerFoundFunc is called whenever a new peer is discovered on the network.
@@ -34,8 +36,6 @@ type Discoverer struct {
 
 	seen map[string]struct{}
 }
-
-// todo : mute "[INFO] mdns: Closing client {.....}" log messages from mdns"
 
 // New creates a Discoverer. It does not start advertising or looking up yet.
 func New(config Config, logger *slog.Logger, onFind PeerFoundFunc) *Discoverer {
@@ -70,7 +70,10 @@ func (d *Discoverer) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to create mDNS service: %w", err)
 	}
 
-	server, err := mdns.NewServer(&mdns.Config{Zone: service})
+	server, err := mdns.NewServer(&mdns.Config{
+		Zone:   service,
+		Logger: logbridge.NewQuietStdLogger(d.logger, "MDNS"),
+	})
 	if err != nil {
 		return fmt.Errorf("failed to start mDNS server: %w", err)
 	}
@@ -114,6 +117,8 @@ func (d *Discoverer) lookupOnce() {
 
 	params := mdns.DefaultParams(serviceName(d.config.ClusterName))
 	params.Entries = entriesCh
+	params.Logger = logbridge.NewQuietStdLogger(d.logger, "MDNS")
+
 	//params.Timeout = 2 * time.Second
 
 	if err := mdns.Query(params); err != nil {
