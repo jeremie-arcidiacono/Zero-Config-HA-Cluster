@@ -170,7 +170,7 @@ func (m *Manager) onBootstrapStart() {
 			if err := m.installer.InstallServerInit(ctx); err != nil {
 				return err
 			}
-			return m.installer.WaitReady(ctx)
+			return m.installer.WaitServerReady(ctx)
 		})
 		return
 	}
@@ -207,7 +207,7 @@ func (m *Manager) maybeInstallServer() {
 		if err := m.installer.InstallServerJoin(ctx, serverIP); err != nil {
 			return err
 		}
-		return m.installer.WaitReady(ctx)
+		return m.installer.WaitServerReady(ctx)
 	})
 }
 
@@ -229,7 +229,7 @@ func (m *Manager) maybeInstallAgent() {
 		if err := m.installer.InstallAgent(ctx, serverIP); err != nil {
 			return err
 		}
-		return m.installer.WaitReady(ctx)
+		return m.installer.WaitAgentReady(ctx)
 	})
 }
 

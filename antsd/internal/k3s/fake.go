@@ -35,8 +35,12 @@ func (f *FakeInstaller) InstallAgent(ctx context.Context, serverIP string) error
 	return f.simulate(ctx, "install agent (join)", serverIP)
 }
 
-func (f *FakeInstaller) WaitReady(ctx context.Context) error {
-	return f.simulate(ctx, "wait ready", "")
+func (f *FakeInstaller) WaitServerReady(ctx context.Context) error {
+	return f.simulate(ctx, "wait server ready", "")
+}
+
+func (f *FakeInstaller) WaitAgentReady(ctx context.Context) error {
+	return f.simulate(ctx, "wait agent ready", "")
 }
 
 func (f *FakeInstaller) simulate(ctx context.Context, operation, serverIP string) error {

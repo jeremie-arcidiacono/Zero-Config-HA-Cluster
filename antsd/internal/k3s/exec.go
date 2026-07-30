@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -17,7 +18,10 @@ const (
 	// binPath is the K3s binary bundled in the ants-os image.
 	binPath = "/usr/local/bin/k3s"
 
-	// readyTimeout bounds WaitReady: K3s can take a while on the first start.
+	// agentKubeconfigPath is the kubelet credential written by the K3s agent.
+	agentKubeconfigPath = "/var/lib/rancher/k3s/agent/kubelet.kubeconfig"
+
+	// readyTimeout bounds the readiness probes: K3s can take a while on the first start.
 	readyTimeout = 5 * time.Minute // todo : use smaller timeout ?
 
 	// readyPollInterval is the delay between two readiness probes.
@@ -77,9 +81,52 @@ func (i *ExecInstaller) runInstallScript(ctx context.Context, extraEnv []string)
 	return nil
 }
 
-// WaitReady polls the local Kubernetes API readiness endpoint through
+// WaitServerReady polls the local Kubernetes API readiness endpoint through
 // "k3s kubectl" until it answers ok, and gives up after readyTimeout.
-func (i *ExecInstaller) WaitReady(ctx context.Context) error {
+func (i *ExecInstaller) WaitServerReady(ctx context.Context) error {
+	return i.pollUntilReady(ctx, "server", func(ctx context.Context) error {
+		probe := exec.CommandContext(ctx, binPath, "kubectl", "get", "--raw=/readyz")
+		if output, err := probe.CombinedOutput(); err != nil {
+			return fmt.Errorf("%w (output: %s)", err, tail(output))
+		}
+		return nil
+	})
+}
+
+// WaitAgentReady polls the cluster through "k3s kubectl"
+// until it reports this node as Ready, and gives up after readyTimeout.
+//
+// An agent hosts no API server, so readiness has to be asked of the control plane.
+func (i *ExecInstaller) WaitAgentReady(ctx context.Context) error {
+	// todo : use same name in config, serf and k3s
+	hostname, err := os.Hostname()
+	if err != nil {
+		return fmt.Errorf("resolve hostname used as the k3s node name: %w", err)
+	}
+	nodeName := strings.ToLower(strings.TrimSpace(hostname)) // DNS RFC-1123 name rule
+
+	const readyConditionPath = `jsonpath={.status.conditions[?(@.type=="Ready")].status}`
+
+	return i.pollUntilReady(ctx, "agent", func(ctx context.Context) error {
+		probe := exec.CommandContext(ctx, binPath, "kubectl",
+			"--kubeconfig", agentKubeconfigPath,
+			"get", "node", nodeName, // Limit the scope to this node only, because an agent is not authorized to get all nodes
+			"-o", readyConditionPath)
+
+		output, err := probe.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("%w (output: %s)", err, tail(output))
+		}
+		if condition := strings.TrimSpace(string(output)); condition != "True" {
+			return fmt.Errorf("node %q is not Ready yet (condition: %q)", nodeName, condition)
+		}
+		return nil
+	})
+}
+
+// pollUntilReady runs probe every readyPollInterval until it succeeds, the
+// context is canceled, or readyTimeout expires. role only labels the logs.
+func (i *ExecInstaller) pollUntilReady(ctx context.Context, role string, probe func(context.Context) error) error {
 	ctx, cancel := context.WithTimeout(ctx, readyTimeout)
 	defer cancel()
 
@@ -87,17 +134,16 @@ func (i *ExecInstaller) WaitReady(ctx context.Context) error {
 	defer ticker.Stop()
 
 	for {
-		probe := exec.CommandContext(ctx, binPath, "kubectl", "get", "--raw=/readyz")
-		if output, err := probe.CombinedOutput(); err == nil {
-			i.logger.Info("local k3s is ready")
+		err := probe(ctx)
+		if err == nil {
+			i.logger.Info("local k3s is ready", "role", role)
 			return nil
-		} else {
-			i.logger.Debug("k3s not ready yet", "output", tail(output))
 		}
+		i.logger.Debug("k3s not ready yet", "role", role, "error", err)
 
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("k3s did not become ready within %s: %w", readyTimeout, ctx.Err())
+			return fmt.Errorf("k3s %s did not become ready within %s: %w", role, readyTimeout, ctx.Err())
 		case <-ticker.C:
 		}
 	}

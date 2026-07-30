@@ -23,9 +23,16 @@ type Installer interface {
 	// InstallAgent installs K3s as an agent joining the cluster through the server at serverIP.
 	InstallAgent(ctx context.Context, serverIP string) error
 
-	// WaitReady blocks until the local K3s instance reports ready, the
+	// WaitServerReady blocks until the local K3s server reports ready, the
 	// context is canceled, or an internal timeout expires.
-	WaitReady(ctx context.Context) error
+	WaitServerReady(ctx context.Context) error
+
+	// WaitAgentReady blocks until the cluster reports this agent node as
+	// Ready, the context is canceled, or an internal timeout expires.
+	//
+	// Readiness is role-specific because an agent hosts no Kubernetes API
+	// server: the server probe cannot be reused here.
+	WaitAgentReady(ctx context.Context) error
 }
 
 // joinURL builds the https URL used by joining nodes to reach the K3s API of the server.
