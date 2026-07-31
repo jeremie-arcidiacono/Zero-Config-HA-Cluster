@@ -4,7 +4,9 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"sync/atomic"
 	"time"
@@ -20,6 +22,7 @@ import (
 // Allows tests to inject a fake Serf implementation.
 type serfAPI interface {
 	Start(ctx context.Context) (<-chan serfnode.Event, error)
+	// Leave announces a permanent departure, reserved for the decommission workflow.
 	Leave() error
 	SetState(state node.State) error
 	SendUserEvent(name string, payload []byte) error
@@ -38,14 +41,14 @@ const (
 
 	// Internal notifications.
 	cmdWaitTimerExpired
-	cmdInstallSucceeded
-	cmdInstallFailed
+	cmdK3sOperationSucceeded
+	cmdK3sOperationFailed
 )
 
 // command is a message processed by the Manager run loop.
 type command struct {
 	typ   commandType
-	err   error        // set for cmdInstallFailed
+	err   error        // set for cmdK3sOperationFailed
 	reply chan<- error // set for user actions awaiting a result
 }
 
@@ -72,13 +75,18 @@ type Manager struct {
 
 	// bootstrap tracks the first-boot protocol progress.
 	bootstrap bootstrapProgress
+
+	// persistedState is the state left by a previous boot, nil on a first boot. Owned by the run loop.
+	persistedState *node.PersistedState
 }
 
 // New creates a new Manager with the given configuration.
 func New(conf *config.Config, logger *slog.Logger, startedAt time.Time) *Manager {
 	var installer k3s.Installer
 	if conf.K3sInstaller == config.InstallerFake {
-		installer = k3s.NewFakeInstaller(logger)
+		fake := k3s.NewFakeInstaller(logger)
+		fake.SetInstalledRole(node.Role(conf.K3sFakeInstalledRole))
+		installer = fake
 	} else {
 		installer = k3s.NewExecInstaller(conf.K3sToken, logger)
 	}
@@ -119,14 +127,13 @@ func (m *Manager) Run(ctx context.Context) error {
 		return err
 	}
 
-	// TODO: implement rejoin-cluster path with persisted state read
-	m.transition(node.StateDiscovering)
+	m.chooseInitialState()
 
 	for {
 		select {
 		case <-ctx.Done():
 			m.bootstrap.stopTimer()
-			_ = m.serf.Leave()
+			// no serf.Leave() here : it's reserved for the decommission workflow (not implemented yet)
 			m.logger.Info("manager shutting down")
 			return nil
 		case e := <-events:
@@ -134,6 +141,25 @@ func (m *Manager) Run(ctx context.Context) error {
 		case c := <-m.commands:
 			m.handleCommand(c)
 		}
+	}
+}
+
+// chooseInitialState decides, from the state left on disk, whether this node
+// is booting for the first time or coming back to a cluster it already belongs to.
+func (m *Manager) chooseInitialState() {
+	persisted, err := node.Load(m.config.StateFilePath)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		m.logger.Info("no persisted state, running the first-boot protocol",
+			"path", m.config.StateFilePath)
+		m.transition(node.StateDiscovering)
+	case err != nil:
+		m.logger.Error("unusable persisted state, refusing to rejoin or bootstrap",
+			"path", m.config.StateFilePath, "error", err)
+		m.transition(node.StateRejoinFailed)
+	default:
+		m.persistedState = &persisted
+		m.startRejoin()
 	}
 }
 
@@ -206,10 +232,48 @@ func (m *Manager) handleCommand(c command) {
 		c.reply <- m.onCancelBootstrap()
 	case cmdWaitTimerExpired:
 		m.onWaitTimerExpired()
-	case cmdInstallSucceeded:
-		m.onInstallSucceeded()
-	case cmdInstallFailed:
-		m.onInstallFailed(c.err)
+	case cmdK3sOperationSucceeded:
+		m.onK3sOperationSucceeded()
+	case cmdK3sOperationFailed:
+		m.onK3sOperationFailed(c.err)
+	}
+}
+
+// startK3sOperation runs a K3s operation (install, readiness wait, ...) in a
+// goroutine and reports the outcome back to the run loop, which stays responsive meanwhile.
+func (m *Manager) startK3sOperation(op func(ctx context.Context) error) {
+	ctx := m.ctx
+	go func() {
+		if err := op(ctx); err != nil {
+			_ = m.submit(command{typ: cmdK3sOperationFailed, err: err})
+			return
+		}
+		_ = m.submit(command{typ: cmdK3sOperationSucceeded})
+	}()
+}
+
+// onK3sOperationSucceeded hands the result to the workflow that started the operation,
+// identified by the current state.
+func (m *Manager) onK3sOperationSucceeded() {
+	switch m.state {
+	case node.StateBootstrapInstallInit, node.StateBootstrapInstallServer, node.StateBootstrapInstallAgent:
+		m.onBootstrapInstallSucceeded()
+	case node.StateRejoinCluster:
+		m.onRejoinReady()
+	default:
+		m.logger.Warn("k3s operation succeeded in unexpected state", "state", m.state)
+	}
+}
+
+// onK3sOperationFailed puts the node in the terminal state of the workflow that started the operation.
+func (m *Manager) onK3sOperationFailed(err error) {
+	switch m.state {
+	case node.StateBootstrapInstallInit, node.StateBootstrapInstallServer, node.StateBootstrapInstallAgent:
+		m.failBootstrap(fmt.Errorf("k3s installation failed: %w", err))
+	case node.StateRejoinCluster:
+		m.failRejoin(err)
+	default:
+		m.logger.Warn("k3s operation failed in unexpected state", "state", m.state, "error", err)
 	}
 }
 

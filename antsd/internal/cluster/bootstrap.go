@@ -25,6 +25,9 @@ import (
 // that the confirmation reaches every node before roles are computed.
 const bootstrapWaitDelay = 10 * time.Second
 
+// bootstrapReadyTimeout bounds the wait for a freshly installed K3s to report ready.
+const bootstrapReadyTimeout = 5 * time.Minute
+
 // Serf user event names of the bootstrap protocol.
 const (
 	// eventBootstrapRequested: a user confirmed the creation of a new
@@ -166,11 +169,11 @@ func (m *Manager) onBootstrapStart() {
 	if rank == 0 {
 		// This node is N0: initialize the cluster.
 		m.transition(node.StateBootstrapInstallInit)
-		m.startInstall(func(ctx context.Context) error {
+		m.startK3sOperation(func(ctx context.Context) error {
 			if err := m.installer.InstallServerInit(ctx); err != nil {
 				return err
 			}
-			return m.installer.WaitServerReady(ctx)
+			return waitBootstrapReady(ctx, m.installer.WaitServerReady)
 		})
 		return
 	}
@@ -203,11 +206,11 @@ func (m *Manager) maybeInstallServer() {
 
 	serverIP := m.bootstrap.serverIP
 	m.transition(node.StateBootstrapInstallServer)
-	m.startInstall(func(ctx context.Context) error {
+	m.startK3sOperation(func(ctx context.Context) error {
 		if err := m.installer.InstallServerJoin(ctx, serverIP); err != nil {
 			return err
 		}
-		return m.installer.WaitServerReady(ctx)
+		return waitBootstrapReady(ctx, m.installer.WaitServerReady)
 	})
 }
 
@@ -225,50 +228,51 @@ func (m *Manager) maybeInstallAgent() {
 
 	serverIP := m.bootstrap.serverIP
 	m.transition(node.StateBootstrapInstallAgent)
-	m.startInstall(func(ctx context.Context) error {
+	m.startK3sOperation(func(ctx context.Context) error {
 		if err := m.installer.InstallAgent(ctx, serverIP); err != nil {
 			return err
 		}
-		return m.installer.WaitAgentReady(ctx)
+		return waitBootstrapReady(ctx, m.installer.WaitAgentReady)
 	})
 }
 
-// startInstall runs an installation step in a goroutine and reports
-// the outcome back to the run loop, which stays responsive meanwhile.
-func (m *Manager) startInstall(install func(ctx context.Context) error) {
-	ctx := m.ctx
-	go func() {
-		if err := install(ctx); err != nil {
-			_ = m.submit(command{typ: cmdInstallFailed, err: err})
-			return
-		}
-		_ = m.submit(command{typ: cmdInstallSucceeded})
-	}()
+// waitBootstrapReady runs a readiness probe with the first-boot deadline.
+func waitBootstrapReady(ctx context.Context, waitReady func(context.Context) error) error {
+	ctx, cancel := context.WithTimeout(ctx, bootstrapReadyTimeout)
+	defer cancel()
+
+	if err := waitReady(ctx); err != nil {
+		return fmt.Errorf("k3s did not become ready within %s: %w", bootstrapReadyTimeout, err)
+	}
+	return nil
 }
 
-// onInstallSucceeded finalizes the installation step that just completed.
-func (m *Manager) onInstallSucceeded() {
+// onBootstrapInstallSucceeded finalizes the installation operation that just completed.
+func (m *Manager) onBootstrapInstallSucceeded() {
 	switch m.state {
 	case node.StateBootstrapInstallInit:
 		// Become stable first, so the state tag update precedes the ready
 		// signal: joining nodes then count this node in the quorum.
-		m.becomeStable(node.RoleServer)
+		m.becomeStable(m.buildFirstBootState(node.RoleServer))
 		if err := m.serf.SendUserEvent(eventServerReady, []byte(m.serf.LocalIP())); err != nil {
 			// The cluster cannot progress without this signal: other nodes would stay in fb_bootstrap_waiting.
 			m.logger.Error("failed to broadcast server-ready", "error", err)
 		}
 	case node.StateBootstrapInstallServer:
-		m.becomeStable(node.RoleServer)
+		m.becomeStable(m.buildFirstBootState(node.RoleServer))
 	case node.StateBootstrapInstallAgent:
-		m.becomeStable(node.RoleAgent)
-	default:
-		m.logger.Warn("install success reported in unexpected state", "state", m.state)
+		m.becomeStable(m.buildFirstBootState(node.RoleAgent))
 	}
 }
 
-// onInstallFailed puts the node in the terminal failure state.
-func (m *Manager) onInstallFailed(err error) {
-	m.failBootstrap(fmt.Errorf("k3s installation failed: %w", err))
+// buildFirstBootState builds the state persisted at the end of a first boot.
+func (m *Manager) buildFirstBootState(role node.Role) node.PersistedState {
+	return node.PersistedState{
+		NodeName:             m.config.NodeName,
+		Role:                 role,
+		BootCount:            1,
+		FirstBootCompletedAt: time.Now(),
+	}
 }
 
 // failBootstrap logs the error and halts the first-boot protocol.
@@ -278,22 +282,18 @@ func (m *Manager) failBootstrap(err error) {
 	m.transition(node.StateBootstrapFailed)
 }
 
-// becomeStable enters the stable state for the given role and persists the first-boot completion on disk.
-func (m *Manager) becomeStable(role node.Role) {
-	m.transition(role.StableState())
-
-	state := node.PersistedState{
-		NodeName:             m.config.NodeName,
-		Role:                 role,
-		BootCount:            1,
-		FirstBootCompletedAt: time.Now(),
-	}
+// becomeStable enters the stable state of the node's role and persists state on disk.
+// todo : move to a new shared file, because it's used in both bootstrap and rejoin workflows ?
+func (m *Manager) becomeStable(state node.PersistedState) {
 	if err := state.Save(m.config.StateFilePath); err != nil {
-		// The cluster is functional, but the node will run the first-boot protocol again on next reboot.
 		m.logger.Error("failed to persist node state", "path", m.config.StateFilePath, "error", err)
-		return
+	} else {
+		m.logger.Debug("node state persisted",
+			"path", m.config.StateFilePath, "role", state.Role, "boot_count", state.BootCount)
 	}
-	m.logger.Info("node state persisted", "path", m.config.StateFilePath, "role", role)
+
+	m.persistedState = &state
+	m.transition(state.Role.StableState())
 }
 
 // aliveMemberNames returns the names of all alive Serf members, this node included.

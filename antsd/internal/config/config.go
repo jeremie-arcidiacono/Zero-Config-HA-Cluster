@@ -8,6 +8,8 @@ import (
 	"net"
 	"os"
 	"strings"
+
+	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/node"
 )
 
 // Config holds all runtime parameters for antsd.
@@ -29,6 +31,11 @@ type Config struct {
 	// K3s
 	K3sInstaller string // InstallerExec or InstallerFake
 	K3sToken     string // pre-shared cluster join token
+
+	// K3sFakeInstalledRole makes the fake installer report K3s as already
+	// installed with this role ("server", "agent", or empty for "not installed").
+	// For development only, to test the rejoin path.
+	K3sFakeInstalledRole string
 
 	LogLevel string
 }
@@ -64,6 +71,7 @@ func Load() (*Config, error) {
 	flag.StringVar(&c.StateFilePath, "state-file", envOr("ANTSD_STATE_FILE", defaultStateFile), "Path to persistent state file")
 	flag.StringVar(&c.K3sInstaller, "k3s-installer", envOr("ANTSD_K3S_INSTALLER", defaultK3sInstaller), "K3s installer implementation (exec or fake)")
 	flag.StringVar(&c.K3sToken, "k3s-token", envOr("ANTSD_K3S_TOKEN", ""), "Pre-shared K3s cluster join token")
+	flag.StringVar(&c.K3sFakeInstalledRole, "k3s-fake-installed-role", envOr("ANTSD_K3S_FAKE_INSTALLED_ROLE", ""), "Role the fake installer reports as already installed, to replay the rejoin path locally (server or agent)")
 	flag.StringVar(&c.LogLevel, "log-level", envOr("ANTSD_LOG_LEVEL", defaultLogLevel), "Log level (debug, info, warn, error)")
 
 	flag.Parse()
@@ -96,6 +104,16 @@ func (c *Config) validate() error {
 	}
 	if c.K3sInstaller == InstallerExec && c.K3sToken == "" {
 		return fmt.Errorf("k3s-token is required with the %q installer", InstallerExec)
+	}
+	if c.K3sFakeInstalledRole != "" {
+		if c.K3sInstaller != InstallerFake {
+			return fmt.Errorf("k3s-fake-installed-role only applies to the %q installer", InstallerFake)
+		}
+		role := node.Role(c.K3sFakeInstalledRole)
+		if role != node.RoleServer && role != node.RoleAgent {
+			return fmt.Errorf("k3s-fake-installed-role must be %q or %q, got %q",
+				node.RoleServer, node.RoleAgent, c.K3sFakeInstalledRole)
+		}
 	}
 	return nil
 }

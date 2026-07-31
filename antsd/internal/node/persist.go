@@ -8,8 +8,9 @@ import (
 	"time"
 )
 
-// PersistedState is the local node state written to disk once the first boot completes.
-// Its presence distinguishes a first boot from a reboot: on later startups antsd will read it back and
+// PersistedState is the local node state written to disk once the first boot completes,
+// and rewritten on every boot that reaches a stable state.
+// Its presence distinguishes a first boot from a reboot: on startup antsd will read it back and
 // take the rejoin-cluster path instead of the first-boot protocol.
 type PersistedState struct {
 	NodeName             string    `json:"node_name"`
@@ -54,8 +55,33 @@ func (s PersistedState) Save(path string) error {
 	return nil
 }
 
-// Exists reports whether a state file is present at path.
-func Exists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.Mode().IsRegular()
+// Load reads the state file written by a previous boot.
+// A missing file is reported as an error wrapping fs.ErrNotExist.
+// Any other error means an unreadable or invalid file.
+func Load(path string) (PersistedState, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// os.ReadFile already returns a fs.ErrNotExist error
+		return PersistedState{}, fmt.Errorf("read state file %s: %w", path, err)
+	}
+
+	var state PersistedState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return PersistedState{}, fmt.Errorf("parse state file %s: %w", path, err)
+	}
+	if err := state.validate(); err != nil {
+		return PersistedState{}, fmt.Errorf("invalid state file %s: %w", path, err)
+	}
+	return state, nil
+}
+
+// validate rejects a state file that cannot describe a node that completed its first boot.
+func (s PersistedState) validate() error {
+	if s.NodeName == "" {
+		return fmt.Errorf("node_name is empty")
+	}
+	if s.Role != RoleServer && s.Role != RoleAgent {
+		return fmt.Errorf("unknown role %q", s.Role)
+	}
+	return nil
 }

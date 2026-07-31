@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"time"
+
+	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/node"
 )
 
 // fakeInstallDelay simulates the duration of a real K3s installation.
@@ -16,6 +18,11 @@ type FakeInstaller struct {
 
 	// Delay overrides fakeInstallDelay when set (used by tests to run faster).
 	Delay time.Duration
+
+	// installed is the role a simulated installation left behind, reported by InstalledRole.
+	// It lives in memory only (forgotten after a restart).
+	//mu        sync.Mutex
+	installed node.Role
 }
 
 // NewFakeInstaller returns an Installer that only simulates installations.
@@ -23,16 +30,24 @@ func NewFakeInstaller(logger *slog.Logger) *FakeInstaller {
 	return &FakeInstaller{logger: logger, Delay: fakeInstallDelay}
 }
 
+// SetInstalledRole pretends K3s is already installed with the given role.
+// An empty role means "not installed".
+func (f *FakeInstaller) SetInstalledRole(role node.Role) {
+	//f.mu.Lock()
+	//defer f.mu.Unlock()
+	f.installed = role
+}
+
 func (f *FakeInstaller) InstallServerInit(ctx context.Context) error {
-	return f.simulate(ctx, "install server (cluster-init)", "")
+	return f.simulateInstall(ctx, "install server (cluster-init)", "", node.RoleServer)
 }
 
 func (f *FakeInstaller) InstallServerJoin(ctx context.Context, serverIP string) error {
-	return f.simulate(ctx, "install server (join)", serverIP)
+	return f.simulateInstall(ctx, "install server (join)", serverIP, node.RoleServer)
 }
 
 func (f *FakeInstaller) InstallAgent(ctx context.Context, serverIP string) error {
-	return f.simulate(ctx, "install agent (join)", serverIP)
+	return f.simulateInstall(ctx, "install agent (join)", serverIP, node.RoleAgent)
 }
 
 func (f *FakeInstaller) WaitServerReady(ctx context.Context) error {
@@ -41,6 +56,26 @@ func (f *FakeInstaller) WaitServerReady(ctx context.Context) error {
 
 func (f *FakeInstaller) WaitAgentReady(ctx context.Context) error {
 	return f.simulate(ctx, "wait agent ready", "")
+}
+
+func (f *FakeInstaller) InstalledRole(context.Context) (node.Role, error) {
+	//f.mu.Lock()
+	//defer f.mu.Unlock()
+
+	if f.installed == "" {
+		return "", ErrNotInstalled
+	}
+	return f.installed, nil
+}
+
+// simulateInstall simulates an installation and records the role,
+// so a later InstalledRole answers like a real node would.
+func (f *FakeInstaller) simulateInstall(ctx context.Context, operation, serverIP string, role node.Role) error {
+	if err := f.simulate(ctx, operation, serverIP); err != nil {
+		return err
+	}
+	f.SetInstalledRole(role)
+	return nil
 }
 
 func (f *FakeInstaller) simulate(ctx context.Context, operation, serverIP string) error {

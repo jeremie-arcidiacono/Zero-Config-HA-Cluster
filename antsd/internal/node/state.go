@@ -45,6 +45,16 @@ const (
 	// failed on this node and it no longer progresses.
 	StateBootstrapFailed State = "fb_bootstrap_failed"
 
+	// StateRejoinCluster means the node found a persisted state (reboot,
+	// crash or power cut): it waits for its already-installed K3s to report ready again.
+	StateRejoinCluster State = "rejoin_cluster"
+
+	// StateRejoinFailed is a terminal state: the node could not rejoin the
+	// cluster it belonged to. It does not fall back to the
+	// first-boot protocol, which would reinstall K3s over existing data.
+	// Currently, the user should use the reset node feature if this state persists.
+	StateRejoinFailed State = "rejoin_failed"
+
 	// StateStableServer means the node runs a K3s server.
 	StateStableServer State = "stable_server"
 
