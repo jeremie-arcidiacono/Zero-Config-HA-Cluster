@@ -6,9 +6,10 @@ On traite 2 cas :
 1. Le client vient d'installer sa/ses premières machines, il n'y a donc pas de cluster existant.
 2. Le client a déjà un cluster opérationnel, il ajoute une nouvelle machine à ce cluster.
 
-Le cas suivant n'est pas traité :
+Le cas suivant n'est pas traité ici :
 
-- La machine a déjà effectué un démarrage auparavant : antsd n'aura pas le même comportement.
+- La machine a déjà effectué un démarrage auparavant : antsd prend le chemin `rejoin_cluster` et ne fait aucune des
+  étapes décrites dans ce fichier.
 
 ## Étapes principales
 
@@ -37,8 +38,9 @@ Ce qui nous donne les états suivants :
     - `fb_bootstrap_install_servers` : les machines N1 et N2 installent K3s en mode server, en rejoignant le cluster de
       N0
     - `fb_bootstrap_install_agent` : les machines N3+ installent K3s en mode agent, en rejoignant le cluster de N0
-    - `fb_bootstrap_failed` : échec du processus de bootstrapping (ex : installation K3s en erreur), la machine ne
-      progresse plus
+    - `fb_bootstrap_failed` : échec du processus de bootstrapping, la machine ne progresse plus. Soit : le
+      script d'installation K3s retourne une erreur, ou le K3s fraîchement installé ne se déclare pas prêt dans les
+      5 minutes.
 
 Tous les états sont préfixés par "fb-" pour "first boot", afin de les différencier des états globaux du reste du cycle
 de vie d'antsd.
@@ -58,6 +60,8 @@ flowchart TD
     style C fill: #664600, color: #000
     style D fill: #664600, color: #000
 ```
+
+La branche du milieu n'est pas implémenté pour le moment.
 
 ## Interaction utilisateur avec l'écran embarqué sur la machine ANTS
 
@@ -98,11 +102,15 @@ Le mécanisme de bootstrapping est une sous-étape qui est déclenchée lorsqu'u
 fois, et qu'elle n'a découvert aucun cluster existant.
 
 Dès qu'un dès node décide qu'il est nécéssaire de lancer le processus de bootstrapping, il en informe tous les autres
-par broadcast, et tous les nodes passe donc en fb_bootstrap_waiting.  
-En passant en mode fb_bootstrap_waiting, un timer local est démarré.  
+par broadcast, et tous les nodes passe donc en `fb_bootstrap_waiting`.  
+En passant en mode `fb_bootstrap_waiting`, un timer local est démarré.  
 La première machine dont le timer expire broadcast le signal de départ : chaque node calcule alors son rôle.  
-Seul N0 passe en fb_bootstrap_install_init, les autres restent en fb_bootstrap_waiting jusqu'au signal server-ready de
+Seul N0 passe en `fb_bootstrap_install_init`, les autres restent en `fb_bootstrap_waiting` jusqu'au signal server-ready
+de
 N0.
+
+Actuellement, les machines N3+ sont bloqués indéfiniment en `fb_bootstrap_waiting` si le quorum de servers n'est pas
+atteint.
 
 ### Événements Serf du protocole
 
@@ -117,7 +125,7 @@ idempotents : un événement reçu dans un état inattendu est ignoré, ce qui a
 
 Le nombre de servers vaut `min(3, N)` : avec 1 ou 2 machines, il n'y a simplement pas d'agent.
 
-Ce diagramme montre le processus à partir de fb_bootstrap_install_init.
+Ce diagramme montre le processus à partir de `fb_bootstrap_install_init`.
 
 Tous les "Serf Event" sont en réalité en parallèle.
 
