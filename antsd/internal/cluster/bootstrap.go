@@ -164,10 +164,7 @@ func (m *Manager) onBootstrapStart() {
 		// This node is N0: initialize the cluster.
 		m.transition(node.StateBootstrapInstallInit)
 		m.startK3sOperation(func(ctx context.Context) error {
-			if err := m.installer.InstallServerInit(ctx); err != nil {
-				return err
-			}
-			return waitBootstrapReady(ctx, m.installer.WaitServerReady)
+			return m.installThenWaitReady(ctx, m.installer.InstallServerInit, m.installer.WaitServerReady)
 		})
 		return
 	}
@@ -191,10 +188,10 @@ func (m *Manager) maybeInstallServer() {
 
 	m.transition(node.StateBootstrapInstallServer)
 	m.startK3sOperation(func(ctx context.Context) error {
-		if err := m.installer.InstallServerJoin(ctx, serverIP); err != nil {
-			return err
-		}
-		return waitBootstrapReady(ctx, m.installer.WaitServerReady)
+		return m.installThenWaitReady(
+			ctx,
+			func(ctx context.Context) error { return m.installer.InstallServerJoin(ctx, serverIP) },
+			m.installer.WaitServerReady)
 	})
 }
 
@@ -214,11 +211,34 @@ func (m *Manager) maybeInstallAgent() {
 
 	m.transition(node.StateBootstrapInstallAgent)
 	m.startK3sOperation(func(ctx context.Context) error {
-		if err := m.installer.InstallAgent(ctx, serverIP); err != nil {
-			return err
-		}
-		return waitBootstrapReady(ctx, m.installer.WaitAgentReady)
+		return m.installThenWaitReady(
+			ctx,
+			func(ctx context.Context) error { return m.installer.InstallAgent(ctx, serverIP) },
+			m.installer.WaitAgentReady)
 	})
+}
+
+// installThenWaitReady runs an installation step, then waits for K3s readiness.
+//
+// The installation script reports a failure when K3s do not come up on its first attempt.
+// But the systemd unit has Restart=always, so K3s retries on its own.
+// That's why we use the readiness probe instead of the exit code.
+// A script error is only fatal when it left no systemd unit behind, meaning the
+// installation itself never happened.
+func (m *Manager) installThenWaitReady(
+	ctx context.Context,
+	install func(context.Context) error,
+	waitReady func(context.Context) error,
+) error {
+	if err := install(ctx); err != nil {
+		// roleErr check if the installation left a systemd unit (it also covers an ambiguous double role installation)
+		if _, roleErr := m.installer.InstalledRole(ctx); roleErr != nil {
+			return fmt.Errorf("k3s install script failed, leaving no usable installation (%v): %w", roleErr, err)
+		}
+		m.logger.Warn("k3s install script reported a failure but wrote its systemd unit, "+
+			"letting the readiness probe decide", "error", err)
+	}
+	return waitBootstrapReady(ctx, waitReady)
 }
 
 // waitBootstrapReady runs a readiness probe with the first-boot deadline.
