@@ -36,10 +36,6 @@ const (
 
 	// eventBootstrapStart: the waiting period is over: every node computes its role from the current member list.
 	eventBootstrapStart = "antsd:bootstrap-start"
-
-	// eventServerReady: N0's K3s is initialized and ready to be joined.
-	// Payload: N0's IP address.
-	eventServerReady = "antsd:server-ready"
 )
 
 // memberStatusAlive is the Serf member status of a live node.
@@ -57,9 +53,6 @@ type bootstrapProgress struct {
 	// totalAliveMembers is the number of alive members when roles were computed, which
 	// fixes the expected server count (quorum size).
 	totalAliveMembers int
-
-	// serverIP is N0's address, learned from the server-ready event.
-	serverIP string
 }
 
 func (b *bootstrapProgress) stopTimer() {
@@ -113,8 +106,6 @@ func (m *Manager) handleUserEvent(e serfnode.Event) {
 		m.onBootstrapRequested()
 	case eventBootstrapStart:
 		m.onBootstrapStart()
-	case eventServerReady:
-		m.onServerReady(string(e.Payload))
 	default:
 		m.logger.Debug("ignoring unknown serf user event", "name", e.Name)
 	}
@@ -146,6 +137,8 @@ func (m *Manager) onWaitTimerExpired() {
 	}
 }
 
+// TODO : add a guard to prevent any install if a k3s unit is found in systemd
+
 // onBootstrapStart computes this node's role from the alive member list and starts the K3s installation.
 func (m *Manager) onBootstrapStart() {
 	if m.state != node.StateBootstrapWaiting {
@@ -167,6 +160,7 @@ func (m *Manager) onBootstrapStart() {
 		"rank", rank, "total", len(names), "role", m.bootstrap.role)
 
 	if rank == 0 {
+		// TODO : add a guard to prevent the init of a cluster if any stable_* node is found => it would cause double cluster.
 		// This node is N0: initialize the cluster.
 		m.transition(node.StateBootstrapInstallInit)
 		m.startK3sOperation(func(ctx context.Context) error {
@@ -178,33 +172,23 @@ func (m *Manager) onBootstrapStart() {
 		return
 	}
 
-	// We are not N0: wait for the server-ready signal.
-	// It may already have been received if events were delivered out of order (really unlikely ?)
-	m.maybeInstallServer()
-	m.maybeInstallAgent()
-}
-
-// onServerReady records N0's address and unblocks the joining nodes.
-func (m *Manager) onServerReady(serverIP string) {
-	if serverIP == "" {
-		m.logger.Warn("ignoring server-ready event with empty payload")
-		return
-	}
-	m.bootstrap.serverIP = serverIP
+	// We are not N0: wait until a server is up.
+	// It may already be, if this node missed the tag change.
 	m.maybeInstallServer()
 	m.maybeInstallAgent()
 }
 
 // maybeInstallServer starts the K3s server installation once this node has
-// a server role (ranks 1..ServerCount-1) and knows N0's address.
+// a server role (ranks 1..ServerCount-1) and a server to join.
 func (m *Manager) maybeInstallServer() {
-	if m.state != node.StateBootstrapWaiting ||
-		m.bootstrap.role != node.RoleServer ||
-		m.bootstrap.serverIP == "" {
+	if m.state != node.StateBootstrapWaiting || m.bootstrap.role != node.RoleServer {
+		return
+	}
+	serverIP := m.joinTargetIP()
+	if serverIP == "" {
 		return
 	}
 
-	serverIP := m.bootstrap.serverIP
 	m.transition(node.StateBootstrapInstallServer)
 	m.startK3sOperation(func(ctx context.Context) error {
 		if err := m.installer.InstallServerJoin(ctx, serverIP); err != nil {
@@ -215,18 +199,19 @@ func (m *Manager) maybeInstallServer() {
 }
 
 // maybeInstallAgent starts the K3s agent installation once this node has an
-// agent role, knows N0's address, and observes the full server quorum.
+// agent role, a server to join, and observes the full server quorum.
 func (m *Manager) maybeInstallAgent() {
-	if m.state != node.StateBootstrapWaiting ||
-		m.bootstrap.role != node.RoleAgent ||
-		m.bootstrap.serverIP == "" {
+	if m.state != node.StateBootstrapWaiting || m.bootstrap.role != node.RoleAgent {
 		return
 	}
 	if m.stableServerCount() < node.DesiredServerCount(m.bootstrap.totalAliveMembers) {
 		return
 	}
+	serverIP := m.joinTargetIP()
+	if serverIP == "" {
+		return
+	}
 
-	serverIP := m.bootstrap.serverIP
 	m.transition(node.StateBootstrapInstallAgent)
 	m.startK3sOperation(func(ctx context.Context) error {
 		if err := m.installer.InstallAgent(ctx, serverIP); err != nil {
@@ -251,13 +236,7 @@ func waitBootstrapReady(ctx context.Context, waitReady func(context.Context) err
 func (m *Manager) onBootstrapInstallSucceeded() {
 	switch m.state {
 	case node.StateBootstrapInstallInit:
-		// Become stable first, so the state tag update precedes the ready
-		// signal: joining nodes then count this node in the quorum.
 		m.becomeStable(m.buildFirstBootState(node.RoleServer))
-		if err := m.serf.SendUserEvent(eventServerReady, []byte(m.serf.LocalIP())); err != nil {
-			// The cluster cannot progress without this signal: other nodes would stay in fb_bootstrap_waiting.
-			m.logger.Error("failed to broadcast server-ready", "error", err)
-		}
 	case node.StateBootstrapInstallServer:
 		m.becomeStable(m.buildFirstBootState(node.RoleServer))
 	case node.StateBootstrapInstallAgent:
@@ -307,6 +286,26 @@ func (m *Manager) aliveMemberNames() []string {
 		}
 	}
 	return names
+}
+
+// joinTargetIP returns the address of the K3s server this node should join,
+// or an empty string while no server is up yet.
+// The address is read from Serf membership.
+// When multiple servers are available: the lowest name wins.
+// todo : better to use a random server instead of the lowest name ? (to avoid overloading IO on the same server ?)
+func (m *Manager) joinTargetIP() string {
+	snapshot := m.serf.Snapshot()
+	target := admin.Member{}
+	for _, member := range snapshot.Members {
+		if member.Status != memberStatusAlive ||
+			member.Tags["state"] != string(node.StateStableServer) {
+			continue
+		}
+		if target.Name == "" || member.Name < target.Name {
+			target = member
+		}
+	}
+	return target.IP
 }
 
 // stableServerCount returns how many alive members currently expose the stable_server state.

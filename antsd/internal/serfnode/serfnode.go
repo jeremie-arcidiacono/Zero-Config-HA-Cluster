@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net"
 	"sort"
-	"strconv"
 	"sync"
 	"time"
 
@@ -316,10 +314,10 @@ func (node *Node) Snapshot() admin.Snapshot {
 		}
 
 		snapshot.Members = append(snapshot.Members, admin.Member{
-			Name:    member.Name,
-			Address: net.JoinHostPort(member.Addr.String(), strconv.Itoa(int(member.Port))),
-			Status:  member.Status.String(),
-			Tags:    tags,
+			Name:   member.Name,
+			IP:     member.Addr.String(),
+			Status: member.Status.String(),
+			Tags:   tags,
 		})
 	}
 

@@ -162,7 +162,7 @@
     <thead>
     <tr>
         <th>Name</th>
-        <th>Address</th>
+        <th>IP</th>
         <th>Status</th>
         <th>State</th>
         <th>Tags</th>
@@ -172,7 +172,7 @@
     {{ range .Members }}
     <tr>
         <td>{{ .Name }}</td>
-        <td>{{ .Address }}</td>
+        <td>{{ .IP }}</td>
         <td class="member-status">{{ .Status }}</td>
         <td>{{ index .Tags "state" }}</td>
         <td>

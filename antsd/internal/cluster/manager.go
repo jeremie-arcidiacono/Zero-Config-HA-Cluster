@@ -284,7 +284,8 @@ func (m *Manager) handleSerfEvent(e serfnode.Event) {
 		m.handleUserEvent(e)
 	default:
 		m.logger.Debug("serf event received", "type", e.Type, "name", e.Name)
-		// Membership or tag changes can complete the quorum an agent-role node is waiting for.
+		// Membership and tag changes are the signal for a server or agent
+		m.maybeInstallServer()
 		m.maybeInstallAgent()
 	}
 }

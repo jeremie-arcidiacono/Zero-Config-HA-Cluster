@@ -105,29 +105,36 @@ Dès qu'un dès node décide qu'il est nécéssaire de lancer le processus de bo
 par broadcast, et tous les nodes passe donc en `fb_bootstrap_waiting`.  
 En passant en mode `fb_bootstrap_waiting`, un timer local est démarré.  
 La première machine dont le timer expire broadcast le signal de départ : chaque node calcule alors son rôle.  
-Seul N0 passe en `fb_bootstrap_install_init`, les autres restent en `fb_bootstrap_waiting` jusqu'au signal server-ready
-de
-N0.
+Seul N0 passe en `fb_bootstrap_install_init`, les autres restent en `fb_bootstrap_waiting`. La condition de sortie n'est
+pas la même selon le rôle :
 
-Actuellement, les machines N3+ sont bloqués indéfiniment en `fb_bootstrap_waiting` si le quorum de servers n'est pas
-atteint.
+- N1 et N2 (server) attendent d'observer **un** membre en `stable_server`, qui leur donne la cible à rejoindre.
+- N3+ (agent) attendent le quorum complet, soit `min(3, N)` membres en `stable_server`.
+
+Non traitée pour l'instant : si un des servers échoue son installation, les machines N3+ restent
+bloquées indéfiniment en `fb_bootstrap_waiting`, puisque le quorum attendu ne sera jamais atteint.
+Le recovery actuellement proposé est de faire un factory reset de la machine en échec (voir plus bas).
 
 ### Événements Serf du protocole
 
-Le protocole repose sur 3 user events Serf (broadcast à tout le monde, y compris l'émetteur ; les handlers sont
+Le protocole repose sur 2 user events Serf (broadcast à tout le monde, y compris l'émetteur ; les handlers sont
 idempotents : un événement reçu dans un état inattendu est ignoré, ce qui absorbe les doublons) :
 
-| Événement                   | Émetteur                            | Payload  | Effet                                                                       |
-|-----------------------------|-------------------------------------|----------|-----------------------------------------------------------------------------|
-| `antsd:bootstrap-requested` | le node dont l'utilisateur confirme | -        | tous les nodes en premier démarrage passent en `fb_bootstrap_waiting`       |
-| `antsd:bootstrap-start`     | 1er node dont le timer expire       | -        | chaque node calcule son rôle (rang dans la liste triée des membres vivants) |
-| `antsd:server-ready`        | N0, une fois son K3s prêt           | IP de N0 | N1/N2 installent K3s server ; les agents surveillent le quorum              |
+| Événement                   | Émetteur                            | Payload | Effet                                                                       |
+|-----------------------------|-------------------------------------|---------|-----------------------------------------------------------------------------|
+| `antsd:bootstrap-requested` | le node dont l'utilisateur confirme | -       | tous les nodes en premier démarrage passent en `fb_bootstrap_waiting`       |
+| `antsd:bootstrap-start`     | 1er node dont le timer expire       | -       | chaque node calcule son rôle (rang dans la liste triée des membres vivants) |
 
 Le nombre de servers vaut `min(3, N)` : avec 1 ou 2 machines, il n'y a simplement pas d'agent.
 
+L'adresse du server à rejoindre ne transite pas par un event.  
+Elle est déduite grâce à la liste de membre de Serf : le membre alive au nom le plus petit dont l'état est
+`stable_server`.
+N'importe quel server déjà installé est une cible de join valide pour K3s.
+
 Ce diagramme montre le processus à partir de `fb_bootstrap_install_init`.
 
-Tous les "Serf Event" sont en réalité en parallèle.
+La propagation du tag est en réalité parallèle vers tous les nodes.
 
 ```mermaid
 sequenceDiagram
@@ -139,19 +146,42 @@ sequenceDiagram
     N0 ->> N0: Installation de k3s Server, en mode initialisation de cluster
     N0 ->> N0: Attendre que K3s soit prêt
     N0 ->> N0: Passage en stable_server
-    N0 ->> N1: Serf Event(antsd:server-ready, N0ip: XXXX)
-    N0 ->> N2: Serf Event(antsd:server-ready, N0ip: XXXX)
-    N0 ->> Nx: Serf Event(antsd:server-ready, N0ip: XXXX)
+    N0 -->> N1: Gossip du tag stable_server
+    N0 -->> N2: Gossip du tag stable_server
+    N0 -->> Nx: Gossip du tag stable_server
+    note over N0, Nx: Chacun lit l'IP à rejoindre dans la liste des membres Serf
 
     par N1 et N2 en parallèle
-        N1 ->> N1: Installation de k3s Server, en rejoignant N0
-        N2 ->> N2: Installation de k3s Server, en rejoignant N0
+        N1 ->> N1: Installation de k3s Server, en rejoignant un server observé
+        N2 ->> N2: Installation de k3s Server, en rejoignant un server observé
     end
 
     N1 ->> N1: Passage en stable_server
     N2 ->> N2: Passage en stable_server
     note over N0, N2: Quorum etcd atteint: cluster HA opérationnel
     note over Nx: Nx attend d'observer N membres en stable_server
-    Nx ->> Nx: Installation de k3s Agent, en rejoignant N0
+    Nx ->> Nx: Installation de k3s Agent, en rejoignant un server stable
     Nx ->> Nx: Passage en stable_agent
 ```
+
+## Échec pendant le premier démarrage
+
+Une machine dont l'installation K3s échoue termine en état terminal `fb_bootstrap_failed`.
+
+La procédure de reprise est un factory reset de cette machine, et pas un simple redémarrage :
+
+- `becomeStable` est le seul endroit qui écrit le fichier d'état, donc une machine tombée en `fb_bootstrap_failed` n'en
+  a pas. Mais elle peut avoir un K3s installé, par exemple si l'échec est le timeout de 5 min sur la
+  probe de readiness : le script d'installation a réussi, et la machine est peut-être déjà membre de l'etcd.
+  Un redémarrage relance K3s (car il est enable dans systemd) pendant qu'antsd (qui ne trouve pas de fichier d'état)
+  relance le premier démarrage et réinstalle par-dessus des données.
+- Un factory reset (uninstall K3s + suppression du fichier persisté) est plus sûr.
+
+Réinitialiser toutes les machines n'est pas utile : les servers déjà installés forment un cluster qui fonctionne.
+En plus cela demande à l'utilisateur une plus grande implication.
+Donc la machine dont l'écran affiche l'échec est celle qu'on réinitialise.
+
+Deux points restent à implémenter pour que cette procédure soit plus sûre (voir les `TODO` dans
+`internal/cluster/bootstrap.go`) : refuser toute installation si une unité K3s existe déjà sur la machine, et refuser
+l'initialisation d'un cluster si un membre `stable_*` est déjà visible (ce qui empêcherait la création d'un second
+cluster à côté du premier).

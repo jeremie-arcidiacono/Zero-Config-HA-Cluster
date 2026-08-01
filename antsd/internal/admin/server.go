@@ -28,10 +28,11 @@ const stateTag = "state"
 
 // Member represents a Serf member at a specific point in time.
 type Member struct {
-	Name    string            `json:"name"`
-	Address string            `json:"address"`
-	Status  string            `json:"status"`
-	Tags    map[string]string `json:"tags"`
+	Name string `json:"name"`
+	// IP is the member's ip address alone
+	IP     string            `json:"ip"`
+	Status string            `json:"status"`
+	Tags   map[string]string `json:"tags"`
 }
 
 // Tag is a single key/value tag entry, used for rendering.
