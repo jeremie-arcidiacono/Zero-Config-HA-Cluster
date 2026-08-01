@@ -7,7 +7,8 @@ package cluster
 // The confirmation is broadcast so every first-boot node enters fb_bootstrap_waiting and starts a timer.
 // The first timer to expire broadcasts the start signal.
 // Each node then derives its role from the sorted member list: rank 0 (N0) initializes K3s,
-// the next ServerCount-1 nodes join as servers once N0 is ready, the rest join as agents once the quorum is visible.
+// the next ServerCount-1 nodes join as servers one at a time in rank order, the rest join as agents
+// once the quorum is visible.
 // All handlers are idempotent: events arriving in an unexpected state are ignored, which absorbs
 // duplicates (e.g., two nodes broadcasting bootstrap-start almost simultaneously).
 
@@ -49,6 +50,9 @@ type bootstrapProgress struct {
 	// role is this node's role, assigned when bootstrap-start is received.
 	// Empty until then.
 	role node.Role
+
+	// rank is this node's position in the sorted member list, assigned together with role.
+	rank int
 
 	// totalAliveMembers is the number of alive members when roles were computed, which
 	// fixes the expected server count (quorum size).
@@ -155,6 +159,7 @@ func (m *Manager) onBootstrapStart() {
 	}
 
 	m.bootstrap.totalAliveMembers = len(names)
+	m.bootstrap.rank = rank
 	m.bootstrap.role = node.RoleForRank(rank, len(names))
 	m.logger.Info("bootstrap role computed",
 		"rank", rank, "total", len(names), "role", m.bootstrap.role)
@@ -176,10 +181,14 @@ func (m *Manager) onBootstrapStart() {
 }
 
 // maybeInstallServer starts the K3s server installation once this node has
-// a server role (ranks 1..ServerCount-1) and a server to join.
+// a server role (ranks 1..ServerCount-1), a server to join, and it is its turn.
 func (m *Manager) maybeInstallServer() {
 	if m.state != node.StateBootstrapWaiting || m.bootstrap.role != node.RoleServer {
 		return
+	}
+
+	if m.stableServerCount() < m.bootstrap.rank {
+		return // Servers join one at a time, in rank order.
 	}
 	serverIP := m.joinTargetIP()
 	if serverIP == "" {
@@ -256,6 +265,7 @@ func waitBootstrapReady(ctx context.Context, waitReady func(context.Context) err
 func (m *Manager) onBootstrapInstallSucceeded() {
 	switch m.state {
 	case node.StateBootstrapInstallInit:
+		// todo : add a delay to ensure k3s is not too busy while finishing is own install ?
 		m.becomeStable(m.buildFirstBootState(node.RoleServer))
 	case node.StateBootstrapInstallServer:
 		m.becomeStable(m.buildFirstBootState(node.RoleServer))

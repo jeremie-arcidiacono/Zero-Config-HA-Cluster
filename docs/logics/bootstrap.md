@@ -108,8 +108,15 @@ La première machine dont le timer expire broadcast le signal de départ : chaqu
 Seul N0 passe en `fb_bootstrap_install_init`, les autres restent en `fb_bootstrap_waiting`. La condition de sortie n'est
 pas la même selon le rôle :
 
-- N1 et N2 (server) attendent d'observer **un** membre en `stable_server`, qui leur donne la cible à rejoindre.
+- N1 et N2 (server) attendent d'observer autant de membres en `stable_server` que leur rang : N1 en attend 1
+  (donc N0), N2 en attend 2 (N0 et N1). Ils s'installent ainsi l'un après l'autre. Le/les membres observés leur
+  donne la cible à rejoindre.
 - N3+ (agent) attendent le quorum complet, soit `min(3, N)` membres en `stable_server`.
+
+Les servers s'installent séquentiellement parce qu'etcd n'admet qu'un seul ajout à la fois : deux join
+simultanés ne sont pas bien supportés. Durant des tests, la charge combinée a suffi à bloquer l'etcd du
+nœud rejoint (N0) assez longtemps pour qu'il perde son bail de leader et redémarre.
+Par contre, les agents ne touchent pas au membership etcd : ils peuvent donc rejoindre en même temps.
 
 Non traitée pour l'instant : si un des servers échoue son installation, les machines N3+ restent
 bloquées indéfiniment en `fb_bootstrap_waiting`, puisque le quorum attendu ne sera jamais atteint.
@@ -150,18 +157,18 @@ sequenceDiagram
     N0 -->> N2: Gossip du tag stable_server
     N0 -->> Nx: Gossip du tag stable_server
     note over N0, Nx: Chacun lit l'IP à rejoindre dans la liste des membres Serf
-
-    par N1 et N2 en parallèle
-        N1 ->> N1: Installation de k3s Server, en rejoignant un server observé
-        N2 ->> N2: Installation de k3s Server, en rejoignant un server observé
-    end
-
+    N1 ->> N1: Installation de k3s Server, en rejoignant le server observé
     N1 ->> N1: Passage en stable_server
+    N1 -->> N2: Gossip du tag stable_server
+%%    normalement, on devrait aussi montrer que le gossip va vers N0 et N3 mais bon, ca serait un peu lourd
+    N2 ->> N2: Installation de k3s Server, en rejoignant un server observé
     N2 ->> N2: Passage en stable_server
-    note over N0, N2: Quorum etcd atteint: cluster HA opérationnel
+    note over N0, N2: Quorum atteint: cluster HA opérationnel
     note over Nx: Nx attend d'observer N membres en stable_server
-    Nx ->> Nx: Installation de k3s Agent, en rejoignant un server stable
-    Nx ->> Nx: Passage en stable_agent
+    par sur tout les autres nodes
+        Nx ->> Nx: Installation de k3s Agent, en rejoignant un server stable
+        Nx ->> Nx: Passage en stable_agent
+    end
 ```
 
 ## Échec pendant le premier démarrage
