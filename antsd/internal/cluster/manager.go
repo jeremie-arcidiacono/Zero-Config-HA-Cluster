@@ -94,7 +94,7 @@ func New(conf *config.Config, logger *slog.Logger, startedAt time.Time) *Manager
 	return newManager(conf, logger, startedAt, serfnode.New(conf, logger), installer)
 }
 
-// newManager create a new Manager from explicit dependencies.
+// newManager creates a new Manager from explicit dependencies.
 func newManager(conf *config.Config, logger *slog.Logger, startedAt time.Time, serf serfAPI, installer k3s.Installer) *Manager {
 	m := &Manager{
 		config:             conf,
@@ -174,6 +174,20 @@ func (m *Manager) transition(to node.State) {
 	if err := m.serf.SetState(to); err != nil {
 		m.logger.Error("failed to change state tag", "state", to, "error", err)
 	}
+}
+
+// becomeStable enters the stable state of the node's role and persists state on disk.
+// Every workflow ends here: first boot, rejoin, and later the joining path.
+func (m *Manager) becomeStable(state node.PersistedState) {
+	if err := state.Save(m.config.StateFilePath); err != nil {
+		m.logger.Error("failed to persist node state", "path", m.config.StateFilePath, "error", err)
+	} else {
+		m.logger.Debug("node state persisted",
+			"path", m.config.StateFilePath, "role", state.Role, "boot_count", state.BootCount)
+	}
+
+	m.persistedState = &state
+	m.transition(state.Role.StableState())
 }
 
 // State implements admin.Controller. Safe for concurrent use.
