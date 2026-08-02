@@ -41,8 +41,14 @@ const (
 	eventBootstrapStart = "antsd:bootstrap-start"
 )
 
-// memberStatusAlive is the Serf member status of a live node.
-const memberStatusAlive = "alive"
+// Serf member statuses.
+const (
+	// memberStatusAlive is the status of a live node.
+	memberStatusAlive = "alive"
+
+	// memberStatusFailed is the status of a node that disappeared without leaving the cluster, it may come back.
+	memberStatusFailed = "failed"
+)
 
 // bootstrapProgress carries the first-boot protocol state between run-loop iterations.
 type bootstrapProgress struct {
@@ -165,8 +171,13 @@ func (m *Manager) onBootstrapStart() {
 		"rank", rank, "total", len(names), "role", m.bootstrap.role)
 
 	if rank == 0 {
-		// TODO : add a guard to prevent the init of a cluster if any stable_* node is found => it would cause double cluster.
-		// This node is N0: initialize the cluster.
+		// This node is N0: initialize the cluster, unless one already exists on the LAN (GUARD).
+		if member, found := m.findExistingClusterMember(); found {
+			m.failBootstrap(fmt.Errorf("refusing to initialize a new cluster: node %q already belongs to one (state %q, %s)",
+				member.Name, member.Tags["state"], member.Status))
+			return
+		}
+
 		m.transition(node.StateBootstrapInstallInit)
 		m.startK3sOperation(func(ctx context.Context) error {
 			return m.installThenWaitReady(ctx, m.installer.InstallServerInit, m.installer.WaitServerReady)
@@ -360,6 +371,23 @@ func (m *Manager) joinTargetIP() string {
 		}
 	}
 	return target.IP
+}
+
+// findExistingClusterMember returns a Serf member that already belongs to a K3s cluster, if there is one.
+//
+// It looks at failed members too: a failed node may come back with its K3s data.
+// Only a decommissioned node ("left") stops counting.
+func (m *Manager) findExistingClusterMember() (admin.Member, bool) {
+	snapshot := m.serf.Snapshot()
+	for _, member := range snapshot.Members {
+		if member.Status != memberStatusAlive && member.Status != memberStatusFailed {
+			continue
+		}
+		if node.State(member.Tags["state"]).InCluster() {
+			return member, true
+		}
+	}
+	return admin.Member{}, false
 }
 
 // stableServerCount returns how many alive members currently expose the stable_server state.

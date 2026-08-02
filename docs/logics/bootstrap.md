@@ -188,7 +188,11 @@ Réinitialiser toutes les machines n'est pas utile : les servers déjà install�
 En plus cela demande à l'utilisateur une plus grande implication.
 Donc la machine dont l'écran affiche l'échec est celle qu'on réinitialise.
 
-Deux points restent à implémenter pour que cette procédure soit plus sûre (voir les `TODO` dans
-`internal/cluster/bootstrap.go`) : refuser toute installation si une unité K3s existe déjà sur la machine, et refuser
-l'initialisation d'un cluster si un membre `stable_*` est déjà visible (ce qui empêcherait la création d'un second
-cluster à côté du premier).
+Deux protections rendent cette procédure plus sûre :
+
+- **Aucune installation K3s sur une machine non vierge.** Avant chaque installation du first-boot, antsd vérifie
+  qu'aucun systemd unit K3s n'existe (avec `InstalledRole`). Si une installation est trouvée, le nœud refuse et demande
+  un factory reset.
+- **Aucune init de cluster à côté d'un cluster existant.** N0 refuse le `--cluster-init` si un membre Serf
+  appartient déjà à un cluster. Les membres `failed` comptent aussi : un nœud tombé peut revenir, et il reviendra avec
+  ses données K3s.

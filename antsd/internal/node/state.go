@@ -62,6 +62,17 @@ const (
 	StateStableAgent State = "stable_agent"
 )
 
+// InCluster reports whether the state means the node already belongs to a K3s cluster:
+// it runs in one, is coming back to one, or failed to.
+func (s State) InCluster() bool {
+	switch s {
+	case StateStableServer, StateStableAgent, StateRejoinCluster, StateRejoinFailed:
+		return true
+	default:
+		return false
+	}
+}
+
 // todo : put the following in role.go ?
 
 // Role is the K3s role assigned to a node during bootstrap.
