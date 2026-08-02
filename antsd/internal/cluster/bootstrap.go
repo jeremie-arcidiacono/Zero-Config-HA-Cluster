@@ -41,15 +41,6 @@ const (
 	eventBootstrapStart = "antsd:bootstrap-start"
 )
 
-// Serf member statuses.
-const (
-	// memberStatusAlive is the status of a live node.
-	memberStatusAlive = "alive"
-
-	// memberStatusFailed is the status of a node that disappeared without leaving the cluster, it may come back.
-	memberStatusFailed = "failed"
-)
-
 // bootstrapProgress carries the first-boot protocol state between run-loop iterations.
 type bootstrapProgress struct {
 	// timer is the fb_bootstrap_waiting grace timer.
@@ -157,7 +148,9 @@ func (m *Manager) onBootstrapStart() {
 	}
 	m.bootstrap.stopTimer()
 
-	names := m.aliveMemberNames()
+	view := m.observeCluster()
+
+	names := view.aliveNames()
 	rank, err := node.Rank(names, m.config.NodeName)
 	if err != nil {
 		m.failBootstrap(fmt.Errorf("compute rank: %w", err))
@@ -172,7 +165,7 @@ func (m *Manager) onBootstrapStart() {
 
 	if rank == 0 {
 		// This node is N0: initialize the cluster, unless one already exists on the LAN (GUARD).
-		if member, found := m.findExistingClusterMember(); found {
+		if member, found := view.findExistingClusterMember(); found {
 			m.failBootstrap(fmt.Errorf("refusing to initialize a new cluster: node %q already belongs to one (state %q, %s)",
 				member.Name, member.Tags["state"], member.Status))
 			return
@@ -187,21 +180,21 @@ func (m *Manager) onBootstrapStart() {
 
 	// We are not N0: wait until a server is up.
 	// It may already be, if this node missed the tag change.
-	m.maybeInstallServer()
-	m.maybeInstallAgent()
+	m.maybeInstallServer(view)
+	m.maybeInstallAgent(view)
 }
 
 // maybeInstallServer starts the K3s server installation once this node has
 // a server role (ranks 1..ServerCount-1), a server to join, and it is its turn.
-func (m *Manager) maybeInstallServer() {
+func (m *Manager) maybeInstallServer(view clusterView) {
 	if m.state != node.StateBootstrapWaiting || m.bootstrap.role != node.RoleServer {
 		return
 	}
 
-	if m.stableServerCount() < m.bootstrap.rank {
+	if view.stableServerCount() < m.bootstrap.rank {
 		return // Servers join one at a time, in rank order.
 	}
-	serverIP := m.joinTargetIP()
+	serverIP := view.joinTargetIP()
 	if serverIP == "" {
 		return
 	}
@@ -217,14 +210,14 @@ func (m *Manager) maybeInstallServer() {
 
 // maybeInstallAgent starts the K3s agent installation once this node has an
 // agent role, a server to join, and observes the full server quorum.
-func (m *Manager) maybeInstallAgent() {
+func (m *Manager) maybeInstallAgent(view clusterView) {
 	if m.state != node.StateBootstrapWaiting || m.bootstrap.role != node.RoleAgent {
 		return
 	}
-	if m.stableServerCount() < node.DesiredServerCount(m.bootstrap.totalAliveMembers) {
+	if view.stableServerCount() < node.DesiredServerCount(m.bootstrap.totalAliveMembers) {
 		return
 	}
-	serverIP := m.joinTargetIP()
+	serverIP := view.joinTargetIP()
 	if serverIP == "" {
 		return
 	}

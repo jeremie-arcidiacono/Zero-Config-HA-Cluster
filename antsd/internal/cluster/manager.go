@@ -285,7 +285,8 @@ func (m *Manager) handleSerfEvent(e serfnode.Event) {
 	default:
 		m.logger.Debug("serf event received", "type", e.Type, "name", e.Name)
 		// Membership and tag changes are the signal for a server or agent
-		m.maybeInstallServer()
-		m.maybeInstallAgent()
+		view := m.observeCluster()
+		m.maybeInstallServer(view)
+		m.maybeInstallAgent(view)
 	}
 }
