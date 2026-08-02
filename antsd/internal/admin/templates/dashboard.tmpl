@@ -153,6 +153,19 @@
         <button type="submit" class="secondary">Back</button>
     </form>
 </div>
+{{ else if eq .State "fb_joining_waiting" }}
+{{/* Screen B: an existing cluster was found, joining it needs no user action */}}
+<div class="actions">
+    <p>An existing cluster was found on the network. This machine joins it automatically, no action needed.</p>
+</div>
+{{ else if or (eq .State "fb_joining_server") (eq .State "fb_joining_agent") }}
+<div class="actions">
+    <p>Installing K3s and joining the existing cluster...</p>
+</div>
+{{ else if or (eq .State "fb_bootstrap_failed") (eq .State "fb_joining_failed") }}
+<div class="actions">
+    <p>First boot failed on this machine. It needs a factory reset, the other machines do not.</p>
+</div>
 {{ end }}
 
 <h2>Members</h2>

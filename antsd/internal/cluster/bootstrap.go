@@ -15,6 +15,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/admin"
@@ -36,7 +37,7 @@ const (
 	eventBootstrapStart = "antsd:bootstrap-start"
 )
 
-// bootstrapProgress carries the first-boot protocol state between run-loop iterations.
+// bootstrapProgress carries the bootstrap path state between run-loop iterations.
 type bootstrapProgress struct {
 	// timer is the fb_bootstrap_waiting grace timer.
 	timer *time.Timer
@@ -51,6 +52,10 @@ type bootstrapProgress struct {
 	// totalAliveMembers is the number of alive members when roles were computed, which
 	// fixes the expected server count (quorum size).
 	totalAliveMembers int
+
+	// members is the cohort this node builds the new cluster with, assigned together with role.
+	// It tells the cluster this node is creating apart from any other one on the LAN.
+	members []string
 }
 
 func (b *bootstrapProgress) stopTimer() {
@@ -58,6 +63,18 @@ func (b *bootstrapProgress) stopTimer() {
 		b.timer.Stop()
 		b.timer = nil
 	}
+}
+
+// isCohortMember reports whether the named node builds the new cluster with this one.
+// The cohort is empty until roles are computed, so before that every cluster is a foreign one.
+func (b *bootstrapProgress) isCohortMember(name string) bool {
+	return slices.Contains(b.members, name)
+}
+
+// reset drops the protocol progress when the node leaves the bootstrap path.
+func (b *bootstrapProgress) reset() {
+	b.stopTimer()
+	*b = bootstrapProgress{}
 }
 
 // stateConflict builds the error returned to user actions that are not allowed in the current state.
@@ -71,6 +88,13 @@ func (m *Manager) onRequestBootstrap() error {
 	if m.state != node.StateDiscovering {
 		return stateConflict("request bootstrap", m.state)
 	}
+
+	// (GUARD) If a cluster already exists on the LAN : refuse the request.
+	if member, found := m.observeCluster().findExistingK3sClusterMember(); found {
+		return fmt.Errorf("cannot create a new cluster: node %q already belongs to one (state %q, %s): %w",
+			member.Name, member.Tags["state"], member.Status, admin.ErrConflict)
+	}
+
 	m.transition(node.StateBootstrapConfirm)
 	return nil
 }
@@ -119,13 +143,13 @@ func (m *Manager) onBootstrapRequested() {
 	m.transition(node.StateBootstrapWaiting)
 	m.bootstrap.timer = time.AfterFunc(m.bootstrapWaitDelay, func() {
 		// Notify through a command.
-		_ = m.submit(command{typ: cmdWaitTimerExpired})
+		_ = m.submit(command{typ: cmdBootstrapWaitExpired})
 	})
 }
 
-// onWaitTimerExpired broadcasts the start signal.
+// onBootstrapWaitExpired broadcasts the bootstrap start signal.
 // Several nodes may do so near-simultaneously: receivers deduplicate by state.
-func (m *Manager) onWaitTimerExpired() {
+func (m *Manager) onBootstrapWaitExpired() {
 	if m.state != node.StateBootstrapWaiting {
 		return
 	}
@@ -152,6 +176,7 @@ func (m *Manager) onBootstrapStart() {
 		return
 	}
 
+	m.bootstrap.members = names
 	m.bootstrap.totalAliveMembers = len(names)
 	m.bootstrap.rank = rank
 	m.bootstrap.role = node.RoleForRank(rank, len(names))
@@ -160,7 +185,7 @@ func (m *Manager) onBootstrapStart() {
 
 	if rank == 0 {
 		// This node is N0: initialize the cluster, unless one already exists on the LAN (GUARD).
-		if member, found := view.findExistingClusterMember(); found {
+		if member, found := view.findExistingK3sClusterMember(); found {
 			m.failBootstrap(fmt.Errorf("refusing to initialize a new cluster: node %q already belongs to one (state %q, %s)",
 				member.Name, member.Tags["state"], member.Status))
 			return
@@ -189,8 +214,8 @@ func (m *Manager) maybeInstallServer(view clusterView) {
 	if view.stableServerCount() < m.bootstrap.rank {
 		return // Servers join one at a time, in rank order.
 	}
-	serverIP := view.joinTargetIP()
-	if serverIP == "" {
+	target, found := view.findK3sJoinTarget()
+	if !found {
 		return
 	}
 
@@ -198,7 +223,7 @@ func (m *Manager) maybeInstallServer(view clusterView) {
 	m.startK3sOperation(func(ctx context.Context) error {
 		return m.installThenWaitReady(
 			ctx,
-			func(ctx context.Context) error { return m.installer.InstallServerJoin(ctx, serverIP) },
+			func(ctx context.Context) error { return m.installer.InstallServerJoin(ctx, target.IP) },
 			m.installer.WaitServerReady)
 	})
 }
@@ -212,8 +237,8 @@ func (m *Manager) maybeInstallAgent(view clusterView) {
 	if view.stableServerCount() < node.DesiredServerCount(m.bootstrap.totalAliveMembers) {
 		return
 	}
-	serverIP := view.joinTargetIP()
-	if serverIP == "" {
+	target, found := view.findK3sJoinTarget()
+	if !found {
 		return
 	}
 
@@ -221,7 +246,7 @@ func (m *Manager) maybeInstallAgent(view clusterView) {
 	m.startK3sOperation(func(ctx context.Context) error {
 		return m.installThenWaitReady(
 			ctx,
-			func(ctx context.Context) error { return m.installer.InstallAgent(ctx, serverIP) },
+			func(ctx context.Context) error { return m.installer.InstallAgent(ctx, target.IP) },
 			m.installer.WaitAgentReady)
 	})
 }

@@ -23,8 +23,12 @@ Après le démarrage de la machine, antsd et Serf sont exécutés, puis :
 Ce qui nous donne les états suivants :
 
 - `fb_discovering` : découverte des autres machines, affichage sur écran
-- `fb_joining` : la machine a découvert un cluster, installe K3s et est en train de rejoindre le cluster
-- `fb_joining_failed` : échec du processus de joining. la machine ne progresse plus
+- `fb_joining_XXXX` : la machine a découvert un cluster existant, elle le rejoint (aucune action utilisateur)
+    - `fb_joining_waiting` : un server à rejoindre a été vu, on laisse le membership se stabiliser avant de décider du
+      rôle
+    - `fb_joining_server` : la machine installe K3s en mode server
+    - `fb_joining_agent` : la machine installe K3s en mode agent
+    - `fb_joining_failed` : échec du processus de joining. la machine ne progresse plus
 - `stable_XXXX` : la machine fait partie d'un cluster K3s, cet état ne fait plus partie du protocole de 1er démarrage
     - `stable_server` : la machine est un server K3s
     - `stable_agent` : la machine est un agent K3s
@@ -52,16 +56,15 @@ flowchart TD
     A -- Utilisateur demande création d'un nouveau cluster --> B[Attente utilisateur...\nÉcran C]
     B -- Confirmation --> C[On déclenche le processus de bootstrapping:\n on broadcast l'info et on passe en mode fb_bootstrap_waiting\nÉcran D]
     A -- Détection d'un node en mode fb_bootstrap_waiting --> D[On passe en mode fb_bootstrap_waiting\nÉcran D]
-    A -- Détection d'un node en mode stable_XXXX --> E[Attente X sec\nÉcran B]
-    E --> J{Nb node en état stable_server\n< 3 ?}
-%% TODO: garder cette logique simple et faire intervenir le rescaling plus tard, ou directement appliquer la logique complexe ici ?
-    J -- Oui --> K[Installation de \nk3s server]
-    J -- Non --> L[Installation de \nk3s agent]
+    A -- Détection d'un server à rejoindre --> E[fb_joining_waiting\nAttente X sec\nÉcran B]
+    C -- Détection d'un server hors de sa cohorte --> E
+    D -- Détection d'un server hors de sa cohorte --> E
+    E --> J{Nb de servers engagé\n< min 3, N ?}
+    J -- Oui --> K[fb_joining_server\nInstallation de \nk3s server]
+    J -- Non --> L[fb_joining_agent\nInstallation de \nk3s agent]
     style C fill: #664600, color: #000
     style D fill: #664600, color: #000
 ```
-
-La branche du milieu n'est pas implémenté pour le moment.
 
 ## Interaction utilisateur avec l'écran embarqué sur la machine ANTS
 
@@ -171,9 +174,59 @@ sequenceDiagram
     end
 ```
 
+# Mécanisme de joining
+
+Le mécanisme de joining est l'autre sous-étape du premier démarrage : une machine vierge est branchée à côté d'un
+cluster qui tourne déjà. Contrairement au bootstrapping, il ne demande aucune action utilisateur : la machine
+s'ajoute toute seule.
+
+### Déclencheur
+
+Le déclencheur est la présence d'une **cible de join** : un membre Serf alive dont l'état est `stable_server`.
+Il est évalué à chaque événement Serf (une machine qui arrive tard reçoit le tag), et pas une seule fois au démarrage.
+
+Cela vaut aussi pour une machine déjà engagée dans un bootstrapping (`fb_discovering`, `fb_bootstrap_confirm`,
+`fb_bootstrap_waiting`) : si le server observé n'appartient pas à **sa propre cohorte** (la liste des membres à partir
+de laquelle elle a calculé son rôle), elle abandonne le bootstrapping et passe en `fb_joining_waiting`.
+Sans ça, seul N0 refuserait (voir les GUARDS plus bas) : toutes les autres machines de la cohorte
+verraient le server étranger dans les tags Serf et le rejoindraient avec un rôle calculé sur la mauvaise population.
+
+On ne se déclenche volontairement pas sur "un membre appartient déjà à un cluster ?", qui est plus large : un cluster
+dont tous les servers sont en `rejoin_cluster` ou `failed` n'est pas rejoignable.
+
+### Choix du rôle
+
+`fb_joining_waiting` démarre un timer, comme `fb_bootstrap_waiting` : le rôle dépend de ce qu'on voit du cluster, il
+faut laisser le membership arriver. La décision est ensuite réévaluée à chaque événement Serf.
+
+Un slot de server est libre si `nb de servers engagés < min(3, nb de machines connues)` :
+
+- **engagé** signifie être un server ou être en train d'en installer un (`stable_server`,
+  `fb_bootstrap_install_init`, `fb_bootstrap_install_servers`, `fb_joining_server`). Compter les installations en
+  cours évite que deux machines visent le même slot.
+- **connu** et **engagé** comptent les membres `failed` : un server tombé garde sa place, le remplacer est la
+  responsabilité du rescaling, pas du joining. Seul un membre `left` (décommissionné) sort du compte.
+
+Si un slot est libre, la machine s'installe en server, sinon en agent.
+
+Comme pour le bootstrapping, les servers s'installent un à la fois (contrainte etcd) et les agents en parallèle.
+Mais le rang du bootstrapping ne peut pas servir ici : les machines arrivent à des instants arbitraires. Le tour est
+donc pris par la machine au nom le plus petit parmi celles en `fb_joining_waiting`, et seulement si aucune machine du
+cluster ne modifie le membership etcd à cet instant (`fb_bootstrap_install_init`, `fb_bootstrap_install_servers`,
+`fb_joining_server`, et `rejoin_cluster`).
+
+`rejoin_cluster` en fait partie meme si un redémarrage n'ajoute aucun membre etcd : c'est un server potentiellement
+absent du quorum, et faire grossir etcd pendant ce temps est risqué. Contrairement aux comptages de slots, seuls les
+membres **alive** sont regardés.
+Donc une machine vivante bloquée longtemps en `rejoin_cluster` (K3s installé mais n'arrive pas à démarrer, antsd attend
+indéfiniment) empêche le join d'un server.
+
+Un agent, n'attend pas le quorum complet contrairement au bootstrapping.
+
 ## Échec pendant le premier démarrage
 
-Une machine dont l'installation K3s échoue termine en état terminal `fb_bootstrap_failed`.
+Une machine dont l'installation K3s échoue termine en état terminal `fb_bootstrap_failed`, ou `fb_joining_failed`
+selon la branche empruntée.
 
 La procédure de reprise est un factory reset de cette machine, et pas un simple redémarrage :
 
@@ -190,9 +243,9 @@ Donc la machine dont l'écran affiche l'échec est celle qu'on réinitialise.
 
 Deux protections rendent cette procédure plus sûre :
 
-- **Aucune installation K3s sur une machine non vierge.** Avant chaque installation du first-boot, antsd vérifie
-  qu'aucun systemd unit K3s n'existe (avec `InstalledRole`). Si une installation est trouvée, le nœud refuse et demande
-  un factory reset.
-- **Aucune init de cluster à côté d'un cluster existant.** N0 refuse le `--cluster-init` si un membre Serf
-  appartient déjà à un cluster. Les membres `failed` comptent aussi : un nœud tombé peut revenir, et il reviendra avec
-  ses données K3s.
+- **Aucune installation K3s sur une machine non vierge.** Avant chaque installation du first-boot (bootstrapping ou
+  joining), antsd vérifie qu'aucun systemd unit K3s n'existe (avec `InstalledRole`). Si une installation est trouvée,
+  le nœud refuse et demande un factory reset.
+- **Aucune création de cluster à côté d'un cluster existant.** Un membre Serf appartenant déjà à un cluster fait
+  refuser le bouton de l'écran A, et fait refuser le `--cluster-init` à N0 si le cluster n'apparaît qu'après.
+  Les membres `failed` comptent aussi : un nœud tombé peut revenir, et il reviendra avec ses données K3s.

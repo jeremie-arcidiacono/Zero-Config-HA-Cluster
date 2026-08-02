@@ -45,6 +45,23 @@ const (
 	// failed on this node and it no longer progresses.
 	StateBootstrapFailed State = "fb_bootstrap_failed"
 
+	// StateJoiningWaiting means the node discovered an existing cluster on its
+	// first boot: it advertises itself as a candidate and lets the membership
+	// settle before deciding with which role it joins.
+	StateJoiningWaiting State = "fb_joining_waiting"
+
+	// StateJoiningServer means the node is installing K3s as an additional
+	// server of the cluster it discovered.
+	StateJoiningServer State = "fb_joining_server"
+
+	// StateJoiningAgent means the node is installing K3s as an agent of the
+	// cluster it discovered.
+	StateJoiningAgent State = "fb_joining_agent"
+
+	// StateJoiningFailed is a terminal state: the node could not join the
+	// cluster it discovered and no longer progresses.
+	StateJoiningFailed State = "fb_joining_failed"
+
 	// StateRejoinCluster means the node found a persisted state (reboot,
 	// crash or power cut): it waits for its already-installed K3s to report ready again.
 	StateRejoinCluster State = "rejoin_cluster"

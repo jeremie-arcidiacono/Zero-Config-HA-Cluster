@@ -43,12 +43,11 @@ func (v clusterView) aliveNames() []string {
 	return names
 }
 
-// joinTargetIP returns the address of the K3s server this node should join,
-// or an empty string while no server is up yet.
+// findK3sJoinTarget returns the K3s server this node should join, if one is up.
 // The address is read from Serf membership.
 // When multiple servers are available: the lowest name wins.
 // todo : better to use a random server instead of the lowest name ? (to avoid overloading IO on the same server ?)
-func (v clusterView) joinTargetIP() string {
+func (v clusterView) findK3sJoinTarget() (admin.Member, bool) {
 	target := admin.Member{}
 	for _, member := range v.snapshot.Members {
 		if member.Status != memberStatusAlive ||
@@ -59,19 +58,16 @@ func (v clusterView) joinTargetIP() string {
 			target = member
 		}
 	}
-	return target.IP
+	return target, target.Name != ""
 }
 
-// findExistingClusterMember returns a Serf member that already belongs to a K3s cluster, if there is one.
+// findExistingK3sClusterMember returns a Serf member that already belongs to a K3s cluster, if there is one.
 //
 // It looks at failed members too: a failed node may come back with its K3s data.
 // Only a decommissioned node ("left") stops counting.
-func (v clusterView) findExistingClusterMember() (admin.Member, bool) {
+func (v clusterView) findExistingK3sClusterMember() (admin.Member, bool) {
 	for _, member := range v.snapshot.Members {
-		if member.Status != memberStatusAlive && member.Status != memberStatusFailed {
-			continue
-		}
-		if node.State(member.Tags["state"]).InCluster() {
+		if isMemberAliveOrFailed(member) && node.State(member.Tags["state"]).InCluster() {
 			return member, true
 		}
 	}
@@ -88,4 +84,92 @@ func (v clusterView) stableServerCount() int {
 		}
 	}
 	return count
+}
+
+// needsAnotherK3sServer reports whether the cluster is still missing a K3s server.
+//
+// A failed member keeps its place: replacing a dead server is the rescaling workflow's job.
+func (v clusterView) needsAnotherK3sServer() bool {
+	totalMember := 0
+	for _, member := range v.snapshot.Members {
+		if isMemberAliveOrFailed(member) {
+			totalMember++
+		}
+	}
+	return v.k3sServerCount() < node.DesiredServerCount(totalMember)
+}
+
+// k3sServerCount returns the number of members that are a K3s server or are installing one.
+func (v clusterView) k3sServerCount() int {
+	count := 0
+	for _, member := range v.snapshot.Members {
+		if isMemberAliveOrFailed(member) && isNodeAK3sServer(node.State(member.Tags["state"])) {
+			count++
+		}
+	}
+	return count
+}
+
+// isEtcdMembershipChanging reports whether a member is currently altering the etcd membership.
+// Only alive members count (a machine that died mid-installation doesn't block later join).
+func (v clusterView) isEtcdMembershipChanging() bool {
+	for _, member := range v.snapshot.Members {
+		if member.Status == memberStatusAlive && isNodeChangingEtcdMembership(node.State(member.Tags["state"])) {
+			return true
+		}
+	}
+	return false
+}
+
+// isFirstWaitingJoiner reports whether self holds the turn among the nodes waiting to join.
+// The lowest name win.
+func (v clusterView) isFirstWaitingJoiner(self string) bool {
+	for _, member := range v.snapshot.Members {
+		if member.Status != memberStatusAlive ||
+			member.Tags["state"] != string(node.StateJoiningWaiting) {
+			continue
+		}
+		if member.Name < self {
+			return false
+		}
+	}
+	return true
+}
+
+// isMemberAliveOrFailed reports whether a member status still belongs to the cluster's population.
+// A failed node may come back, so only a decommissioned one ("left") stops counting.
+func isMemberAliveOrFailed(member admin.Member) bool {
+	return member.Status == memberStatusAlive || member.Status == memberStatusFailed
+}
+
+// isNodeAK3sServer reports whether a state means the member runs a K3s server or is installing one.
+// Such a member holds one of the cluster's server slots.
+func isNodeAK3sServer(state node.State) bool {
+	switch state {
+	// todo : add rejoin state ? split rejoin_cluster into two role ?
+	case node.StateStableServer,
+		node.StateBootstrapInstallInit,
+		node.StateBootstrapInstallServer,
+		node.StateJoiningServer:
+		return true
+	default:
+		return false
+	}
+}
+
+// isNodeChangingEtcdMembership reports whether a state means the member is currently
+// modifying the etcd membership, which admits a single change at a time.
+//
+// rejoin_cluster is included although a restarting node adds no member: it may be
+// a server reconnecting to the quorum, and adding one meanwhile is risky.
+func isNodeChangingEtcdMembership(state node.State) bool {
+	switch state {
+	case node.StateBootstrapInstallInit,
+		node.StateBootstrapInstallServer,
+		node.StateJoiningServer,
+		node.StateRejoinCluster:
+		return true
+	default:
+		return false
+	}
 }

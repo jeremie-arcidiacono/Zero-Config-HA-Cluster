@@ -40,7 +40,8 @@ const (
 	cmdCancelBootstrap
 
 	// Internal notifications.
-	cmdWaitTimerExpired
+	cmdBootstrapWaitExpired
+	cmdJoinWaitExpired
 	cmdK3sOperationSucceeded
 	cmdK3sOperationFailed
 )
@@ -72,9 +73,13 @@ type Manager struct {
 
 	// bootstrapWaitDelay is the fb_bootstrap_waiting grace period.
 	bootstrapWaitDelay time.Duration
+	// joinWaitDelay is the fb_joining_waiting grace period.
+	joinWaitDelay time.Duration
 
-	// bootstrap tracks the first-boot protocol progress.
+	// bootstrap tracks the first-boot bootstrap protocol progress.
 	bootstrap bootstrapProgress
+	// joining tracks the first-boot joining path progress.
+	joining joiningProgress
 
 	// persistedState is the state left by a previous boot, nil on a first boot. Owned by the run loop.
 	persistedState *node.PersistedState
@@ -105,6 +110,7 @@ func newManager(conf *config.Config, logger *slog.Logger, startedAt time.Time, s
 		commands:           make(chan command, 16),
 		state:              node.StateStarting,
 		bootstrapWaitDelay: bootstrapWaitDelay,
+		joinWaitDelay:      joinWaitDelay,
 	}
 	m.stateView.Store(node.StateStarting)
 	return m
@@ -133,6 +139,7 @@ func (m *Manager) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			m.bootstrap.stopTimer()
+			m.joining.stopTimer()
 			// no serf.Leave() here : it's reserved for the decommission workflow (not implemented yet)
 			m.logger.Info("manager shutting down")
 			return nil
@@ -244,8 +251,10 @@ func (m *Manager) handleCommand(c command) {
 		c.reply <- m.onConfirmBootstrap()
 	case cmdCancelBootstrap:
 		c.reply <- m.onCancelBootstrap()
-	case cmdWaitTimerExpired:
-		m.onWaitTimerExpired()
+	case cmdBootstrapWaitExpired:
+		m.onBootstrapWaitExpired()
+	case cmdJoinWaitExpired:
+		m.onJoinWaitExpired()
 	case cmdK3sOperationSucceeded:
 		m.onK3sOperationSucceeded()
 	case cmdK3sOperationFailed:
@@ -272,6 +281,8 @@ func (m *Manager) onK3sOperationSucceeded() {
 	switch m.state {
 	case node.StateBootstrapInstallInit, node.StateBootstrapInstallServer, node.StateBootstrapInstallAgent:
 		m.onBootstrapInstallSucceeded()
+	case node.StateJoiningServer, node.StateJoiningAgent:
+		m.onJoiningInstallSucceeded()
 	case node.StateRejoinCluster:
 		m.onRejoinReady()
 	default:
@@ -284,6 +295,8 @@ func (m *Manager) onK3sOperationFailed(err error) {
 	switch m.state {
 	case node.StateBootstrapInstallInit, node.StateBootstrapInstallServer, node.StateBootstrapInstallAgent:
 		m.failBootstrap(fmt.Errorf("k3s installation failed: %w", err))
+	case node.StateJoiningServer, node.StateJoiningAgent:
+		m.failJoining(fmt.Errorf("k3s installation failed: %w", err))
 	case node.StateRejoinCluster:
 		m.failRejoin(err)
 	default:
@@ -298,8 +311,11 @@ func (m *Manager) handleSerfEvent(e serfnode.Event) {
 		m.handleUserEvent(e)
 	default:
 		m.logger.Debug("serf event received", "type", e.Type, "name", e.Name)
-		// Membership and tag changes are the signal for a server or agent
+		// Membership and tag changes are the signal for a server or agent.
+		// The joining path comes first: it may move the node off the bootstrap protocol.
 		view := m.observeCluster()
+		m.maybeStartJoiningPath(view)
+		m.maybeJoinCluster(view)
 		m.maybeInstallServer(view)
 		m.maybeInstallAgent(view)
 	}
