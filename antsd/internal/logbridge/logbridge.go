@@ -37,7 +37,7 @@ var levels = map[string]slog.Level{
 type writer struct {
 	logger    *slog.Logger
 	component string
-	// quiet demotes info lines to debug level, see NewQuietStdLogger.
+	// quiet discards lines below the warning level, see NewQuietStdLogger.
 	quiet bool
 }
 
@@ -53,8 +53,8 @@ func NewStdLogger(logger *slog.Logger, component string) *log.Logger {
 	return log.New(newWriter(logger, component, false), "", 0)
 }
 
-// NewQuietStdLogger is like NewStdLogger but reports info lines at
-// debug level (warnings and errors keep their severity).
+// NewQuietStdLogger is like NewStdLogger but discards every line below the
+// warning level (warnings and errors keep their severity).
 //
 // It is meant for libraries that spam tons of useless logs at info level.
 func NewQuietStdLogger(logger *slog.Logger, component string) *log.Logger {
@@ -65,7 +65,7 @@ func NewQuietStdLogger(logger *slog.Logger, component string) *log.Logger {
 func (w *writer) Write(p []byte) (int, error) {
 	level, msg := parseLine(string(p))
 	if w.quiet && level < slog.LevelWarn {
-		level = slog.LevelDebug
+		return len(p), nil // the line is dropped
 	}
 	w.logger.Log(context.Background(), level, w.tag(msg))
 	return len(p), nil
