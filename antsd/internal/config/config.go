@@ -8,10 +8,16 @@ import (
 	"net"
 	"os"
 	"strings"
+
+	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/node"
 )
 
 // Config holds all runtime parameters for antsd.
 type Config struct {
+	// NodeName is the cluster-wide unique node identifier, also used for role election (lowest name).
+	// Defaults to the machine hostname. TODO : use better naming (derived from MAC address ?)
+	NodeName string
+
 	// Serf
 	SerfBindAddr string
 	SerfBindPort int
@@ -22,26 +28,50 @@ type Config struct {
 	// Persistence
 	StateFilePath string
 
+	// K3s
+	K3sInstaller string // InstallerExec or InstallerFake
+	K3sToken     string // pre-shared cluster join token
+
+	// K3sFakeInstalledRole makes the fake installer report K3s as already
+	// installed with this role ("server", "agent", or empty for "not installed").
+	// For development only, to test the rejoin path.
+	K3sFakeInstalledRole string
+
 	LogLevel string
 }
+
+// Supported values for Config.K3sInstaller.
+const (
+	// InstallerExec runs the real K3s install script.
+	InstallerExec = "exec"
+	// InstallerFake simulates installations (local development and tests).
+	InstallerFake = "fake"
+)
 
 // Default values, used when neither flag nor env var is set.
 const (
 	defaultSerfBindAddr = "0.0.0.0"
 	defaultSerfBindPort = 7946
-	defaultHTTPPort     = 80
+	defaultHTTPPort     = 9000
 	defaultStateFile    = "/var/lib/antsd/state.json"
 	defaultLogLevel     = "debug"
+	defaultK3sInstaller = InstallerExec
 )
 
 // Load parses CLI flags and environment variables, and returns a validated Config.
 func Load() (*Config, error) {
 	c := &Config{}
 
+	hostname, _ := os.Hostname()
+
+	flag.StringVar(&c.NodeName, "node-name", envOr("ANTSD_NODE_NAME", hostname), "Unique node name (defaults to hostname)")
 	flag.StringVar(&c.SerfBindAddr, "serf-bind-addr", envOr("ANTSD_SERF_BIND_ADDR", defaultSerfBindAddr), "Serf bind address")
 	flag.IntVar(&c.SerfBindPort, "serf-bind-port", envOrInt("ANTSD_SERF_BIND_PORT", defaultSerfBindPort), "Serf bind port")
 	flag.IntVar(&c.HTTPPort, "http-port", envOrInt("ANTSD_HTTP_PORT", defaultHTTPPort), "HTTP administration (monitoring and control) port")
 	flag.StringVar(&c.StateFilePath, "state-file", envOr("ANTSD_STATE_FILE", defaultStateFile), "Path to persistent state file")
+	flag.StringVar(&c.K3sInstaller, "k3s-installer", envOr("ANTSD_K3S_INSTALLER", defaultK3sInstaller), "K3s installer implementation (exec or fake)")
+	flag.StringVar(&c.K3sToken, "k3s-token", envOr("ANTSD_K3S_TOKEN", ""), "Pre-shared K3s cluster join token")
+	flag.StringVar(&c.K3sFakeInstalledRole, "k3s-fake-installed-role", envOr("ANTSD_K3S_FAKE_INSTALLED_ROLE", ""), "Role the fake installer reports as already installed, to replay the rejoin path locally (server or agent)")
 	flag.StringVar(&c.LogLevel, "log-level", envOr("ANTSD_LOG_LEVEL", defaultLogLevel), "Log level (debug, info, warn, error)")
 
 	flag.Parse()
@@ -54,6 +84,9 @@ func Load() (*Config, error) {
 
 // validate checks that the configuration is valid.
 func (c *Config) validate() error {
+	if c.NodeName == "" {
+		return fmt.Errorf("node-name must not be empty")
+	}
 	if net.ParseIP(c.SerfBindAddr) == nil {
 		return fmt.Errorf("invalid serf-bind-addr: %s", c.SerfBindAddr)
 	}
@@ -65,6 +98,22 @@ func (c *Config) validate() error {
 	}
 	if c.StateFilePath == "" {
 		return fmt.Errorf("state-file must not be empty")
+	}
+	if c.K3sInstaller != InstallerExec && c.K3sInstaller != InstallerFake {
+		return fmt.Errorf("k3s-installer must be %q or %q, got %q", InstallerExec, InstallerFake, c.K3sInstaller)
+	}
+	if c.K3sInstaller == InstallerExec && c.K3sToken == "" {
+		return fmt.Errorf("k3s-token is required with the %q installer", InstallerExec)
+	}
+	if c.K3sFakeInstalledRole != "" {
+		if c.K3sInstaller != InstallerFake {
+			return fmt.Errorf("k3s-fake-installed-role only applies to the %q installer", InstallerFake)
+		}
+		role := node.Role(c.K3sFakeInstalledRole)
+		if role != node.RoleServer && role != node.RoleAgent {
+			return fmt.Errorf("k3s-fake-installed-role must be %q or %q, got %q",
+				node.RoleServer, node.RoleAgent, c.K3sFakeInstalledRole)
+		}
 	}
 	return nil
 }
@@ -87,8 +136,13 @@ func envOrInt(key string, fallback int) int {
 }
 
 func (c *Config) String() string {
-	return fmt.Sprintf("Config{SerfBindAddr: %s, SerfBindPort: %d, HTTPPort: %d, StateFilePath: %s, LogLevel: %s}",
-		c.SerfBindAddr, c.SerfBindPort, c.HTTPPort, c.StateFilePath, c.LogLevel)
+	// The K3s token is a secret: report only whether it is set.
+	tokenInfo := "UNSET"
+	if c.K3sToken != "" {
+		tokenInfo = "set"
+	}
+	return fmt.Sprintf("Config{NodeName: %s, SerfBindAddr: %s, SerfBindPort: %d, HTTPPort: %d, StateFilePath: %s, K3sInstaller: %s, K3sToken: %s, LogLevel: %s}",
+		c.NodeName, c.SerfBindAddr, c.SerfBindPort, c.HTTPPort, c.StateFilePath, c.K3sInstaller, tokenInfo, c.LogLevel)
 }
 
 // GetLogLevel returns the slog.Level corresponding to the configured LogLevel string.

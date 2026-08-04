@@ -4,8 +4,10 @@
   become: true
   gather_facts: false
   vars:
-    antsd_service_src: "{{ playbook_dir }}/files/antsd/antsd.service"
+    antsd_service_src: antsd/antsd.service
     antsd_service_dest: /etc/systemd/system/antsd.service
+    antsd_env_src: antsd/antsd.env
+    antsd_env_dest: /etc/antsd/antsd.env
   tasks:
     # We use shell instead of builtin.hostname and builtin.lineinfile because we got issue with privilege escalation between the two tasks.
     # The shell command is a workaround to update the hostname and /etc/hosts in one task.
@@ -27,6 +29,22 @@
         group: root
         mode: '0644'
       notify: Reload systemd daemon
+
+    - name: Ensure /etc/antsd config directory exists
+      ansible.builtin.file:
+        path: /etc/antsd
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Deploy antsd environment file
+      ansible.builtin.copy:
+        src: "{{ antsd_env_src }}"
+        dest: "{{ antsd_env_dest }}"
+        owner: root
+        group: root
+        mode: '0600'
 
     - name: Enable antsd service
       ansible.builtin.systemd_service:

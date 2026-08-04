@@ -1,9 +1,11 @@
 // Package admin provides an HTTP server for system monitoring, observability, and control.
 //
-// It exposes three endpoints:
+// It exposes the following endpoints:
 //   - GET / renders an HTML dashboard
 //   - GET /health returns a simple health check
 //   - GET /status returns system and process information as JSON
+//   - POST /bootstrap, /bootstrap/confirm, /bootstrap/cancel drive the
+//     first-boot protocol (replace the physical screen buttons)
 package admin
 
 import (
@@ -26,10 +28,11 @@ const stateTag = "state"
 
 // Member represents a Serf member at a specific point in time.
 type Member struct {
-	Name    string            `json:"name"`
-	Address string            `json:"address"`
-	Status  string            `json:"status"`
-	Tags    map[string]string `json:"tags"`
+	Name string `json:"name"`
+	// IP is the member's ip address alone
+	IP     string            `json:"ip"`
+	Status string            `json:"status"`
+	Tags   map[string]string `json:"tags"`
 }
 
 // Tag is a single key/value tag entry, used for rendering.
@@ -68,6 +71,7 @@ type Snapshot struct {
 // It contains the cluster Snapshot and local process information.
 type Status struct {
 	Snapshot
+	State         string    `json:"state"`
 	StartedAt     time.Time `json:"started_at"`
 	UptimeSeconds int64     `json:"uptime_seconds"`
 }
@@ -83,35 +87,60 @@ type Source interface {
 	Snapshot() Snapshot
 }
 
+// ErrConflict is returned by Controller actions that are not allowed in the node's current lifecycle state
+var ErrConflict = errors.New("action not allowed in the current state")
+
+// Controller exposes the user actions of the node lifecycle.
+// It is implemented by the cluster manager.
+type Controller interface {
+	// State returns the node's current lifecycle state.
+	State() string
+
+	// RequestBootstrap asks to create a new cluster (screen A button).
+	RequestBootstrap() error
+
+	// ConfirmBootstrap confirms the creation (screen C confirm button).
+	ConfirmBootstrap() error
+
+	// CancelBootstrap returns to discovery (screen C back button).
+	CancelBootstrap() error
+}
+
 // Server exposes the administration HTTP interface.
 type Server struct {
-	logger    *slog.Logger
-	source    Source
-	server    *http.Server
-	template  *template.Template
-	startedAt time.Time
+	logger     *slog.Logger
+	source     Source
+	controller Controller
+	server     *http.Server
+	template   *template.Template
+	startedAt  time.Time
 }
 
 // NewServer creates a new server that listens on the specified port.
-// The source parameter provides cluster snapshot data for the monitoring endpoints.
+// source parameter provides cluster snapshot data for the monitoring
+// endpoints, while controller receives the user actions of the control endpoints.
 // Returns an error if template parsing fails.
-func NewServer(port int, source Source, logger *slog.Logger, startedAt time.Time) (*Server, error) {
+func NewServer(port int, source Source, controller Controller, logger *slog.Logger, startedAt time.Time) (*Server, error) {
 	page, err := parseTemplates()
 	if err != nil {
 		return nil, err
 	}
 
 	server := &Server{
-		logger:    logger,
-		source:    source,
-		template:  page,
-		startedAt: startedAt,
+		logger:     logger,
+		source:     source,
+		controller: controller,
+		template:   page,
+		startedAt:  startedAt,
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", server.handleDashboard)
 	mux.HandleFunc("GET /health", server.handleHealth)
 	mux.HandleFunc("GET /status", server.handleStatus)
+	mux.HandleFunc("POST /bootstrap", server.handleAction(controller.RequestBootstrap))
+	mux.HandleFunc("POST /bootstrap/confirm", server.handleAction(controller.ConfirmBootstrap))
+	mux.HandleFunc("POST /bootstrap/cancel", server.handleAction(controller.CancelBootstrap))
 
 	server.server = &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
@@ -156,6 +185,22 @@ func (s *Server) Start(ctx context.Context) error {
 	return nil
 }
 
+// handleAction runs a Controller action and redirects back to the dashboard on success.
+func (s *Server) handleAction(action func() error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := action(); err != nil {
+			if errors.Is(err, ErrConflict) {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
+			s.logger.Error("admin action failed", "path", r.URL.Path, "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	}
+}
+
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte("ok\n"))
@@ -179,6 +224,7 @@ func (s *Server) status() Status {
 
 	return Status{
 		Snapshot:      snapshot,
+		State:         s.controller.State(),
 		StartedAt:     s.startedAt,
 		UptimeSeconds: int64(snapshot.CollectedAt.Sub(s.startedAt).Seconds()),
 	}

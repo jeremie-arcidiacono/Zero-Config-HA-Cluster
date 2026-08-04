@@ -4,6 +4,9 @@
 ping:
 	ansible all -m ping
 
+shutdown:
+	ansible all -b -B 30 -P 0 -m shell -a "sleep 2 && systemctl poweroff"
+
 init:
 	ansible-playbook playbooks/init.yml
 
