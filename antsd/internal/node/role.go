@@ -5,14 +5,47 @@ import (
 	"slices"
 )
 
-// MaxServers is the target number of K3s servers in a cluster.
-// Rescaling process isn't implemented yet.
-const MaxServers = 3
+// MaxServers is the highest number of K3s servers in a cluster.
+// Seven is etcd's recommended ceiling.
+const MaxServers = 7
 
-// DesiredServerCount returns how many of the total nodes must run as K3s servers.
-// With fewer than MaxServers nodes, every node is a server.
+// DesiredServerCount returns how many of the total nodes must run as K3s servers:
+// the largest odd count, capped at MaxServers.
 func DesiredServerCount(total int) int {
-	return min(total, MaxServers)
+	if total <= 0 {
+		return 0
+	}
+
+	count := min(total, MaxServers)
+	if count%2 == 0 {
+		count--
+	}
+	return count
+}
+
+// Role is the K3s role a node runs.
+// Assigned during the first boot, and changed afterward by the rescaling workflow.
+type Role string
+
+const (
+	RoleServer Role = "server"
+	RoleAgent  Role = "agent"
+)
+
+// StableState returns the stable lifecycle state corresponding to the role.
+func (r Role) StableState() State {
+	if r == RoleServer {
+		return StateStableServer
+	}
+	return StateStableAgent
+}
+
+// Other returns the opposite role (agent <=> server)
+func (r Role) Other() Role {
+	if r == RoleServer {
+		return RoleAgent
+	}
+	return RoleServer
 }
 
 // Rank returns the position of self among names, ordered lexicographically.

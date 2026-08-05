@@ -29,6 +29,11 @@ type Installer interface {
 	// InstallAgent installs K3s as an agent joining the cluster through the server at serverIP.
 	InstallAgent(ctx context.Context, serverIP string) error
 
+	// Convert replaces the local K3s installation with the other role, joining the cluster
+	// through the server at serverIP. It is the local part of the rescaling workflow.
+	// It returns an error when the node has no installation to convert, or an ambiguous one.
+	Convert(ctx context.Context, to node.Role, serverIP string) error
+
 	// WaitServerReady blocks until the local K3s server reports ready, the
 	// context is canceled, or an internal timeout expires.
 	WaitServerReady(ctx context.Context) error

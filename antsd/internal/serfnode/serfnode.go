@@ -239,6 +239,20 @@ func (node *Node) Leave() error {
 	return serf.Leave()
 }
 
+// RemoveFailedNode erases a failed member from the Serf memberlist (propagated on every node).
+// The node never reaches the "left" status.
+func (node *Node) RemoveFailedNode(name string) error {
+	node.mu.RLock()
+	serf := node.serf
+	node.mu.RUnlock()
+
+	if serf == nil {
+		return fmt.Errorf("serf not started")
+	}
+	// Use the prune version to delete the node instead of just giving it the "left" status.
+	return serf.RemoveFailedNodePrune(name)
+}
+
 // SetState broadcasts the node lifecycle state to the cluster by updating
 // the Serf "state" tag.
 func (node *Node) SetState(state nodepkg.State) error {

@@ -9,6 +9,7 @@ package node
 // States prefix :
 // - "fb_" belongs to the first-boot protocol.
 // - "stable_" means the node is a functioning member of the K3s cluster.
+// - "rescale_" belongs to the rescaling workflow, which adjusts the control plane after the population changed.
 type State string
 
 const (
@@ -72,6 +73,23 @@ const (
 	// Currently, the user should use the reset node feature if this state persists.
 	StateRejoinFailed State = "rejoin_failed"
 
+	// StateRescaleCoordinating means this node drives one rescaling round:
+	// it evicts the machines that are gone and/or if the control plane no longer has the right size,
+	// designates the node that converts.
+	StateRescaleCoordinating State = "rescale_coordinating"
+
+	// StateRescalePromoting means the node was designated to grow the control
+	// plane: it converts its K3s agent into a server.
+	StateRescalePromoting State = "rescale_promoting"
+
+	// StateRescaleDemoting means the node was designated to shrink the control
+	// plane: it converts its K3s server into an agent.
+	StateRescaleDemoting State = "rescale_demoting"
+
+	// StateRescaleFailed is a terminal state: a rescaling operation (promoting/demoting) failed on this node.
+	// The cluster keeps running with the topology it had, this machine no longer progresses.
+	StateRescaleFailed State = "rescale_failed"
+
 	// StateStableServer means the node runs a K3s server.
 	StateStableServer State = "stable_server"
 
@@ -80,30 +98,14 @@ const (
 )
 
 // InCluster reports whether the state means the node already belongs to a K3s cluster:
-// it runs in one, is coming back to one, or failed to.
+// it runs in one, is coming back to one, is changing its role, or failed to.
 func (s State) InCluster() bool {
 	switch s {
-	case StateStableServer, StateStableAgent, StateRejoinCluster, StateRejoinFailed:
+	case StateStableServer, StateStableAgent,
+		StateRejoinCluster, StateRejoinFailed,
+		StateRescaleCoordinating, StateRescalePromoting, StateRescaleDemoting, StateRescaleFailed:
 		return true
 	default:
 		return false
 	}
-}
-
-// todo : put the following in role.go ?
-
-// Role is the K3s role assigned to a node during bootstrap.
-type Role string
-
-const (
-	RoleServer Role = "server"
-	RoleAgent  Role = "agent"
-)
-
-// StableState returns the stable lifecycle state corresponding to the role.
-func (r Role) StableState() State {
-	if r == RoleServer {
-		return StateStableServer
-	}
-	return StateStableAgent
 }

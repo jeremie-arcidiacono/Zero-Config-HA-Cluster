@@ -24,6 +24,7 @@ type serfAPI interface {
 	Start(ctx context.Context) (<-chan serfnode.Event, error)
 	// Leave announces a permanent departure, reserved for the decommission workflow.
 	Leave() error
+	RemoveFailedNode(name string) error
 	SetState(state node.State) error
 	SendUserEvent(name string, payload []byte) error
 	LocalIP() string
@@ -42,6 +43,7 @@ const (
 	// Internal notifications.
 	cmdBootstrapWaitExpired
 	cmdJoinWaitExpired
+	cmdRescaleCheck
 	cmdK3sOperationSucceeded
 	cmdK3sOperationFailed
 )
@@ -60,8 +62,9 @@ type Manager struct {
 	logger    *slog.Logger
 	startedAt time.Time
 
-	serf      serfAPI
-	installer k3s.Installer
+	serf         serfAPI
+	installer    k3s.Installer
+	clusterAdmin k3s.ClusterAdmin
 
 	ctx      context.Context
 	commands chan command
@@ -75,11 +78,18 @@ type Manager struct {
 	bootstrapWaitDelay time.Duration
 	// joinWaitDelay is the fb_joining_waiting grace period.
 	joinWaitDelay time.Duration
+	// serverFailureGrace is how long a machine must stay continuously Serf-failed before the
+	// rescaling workflow evicts it.
+	serverFailureGrace time.Duration
+	// rescaleSettleDelay debounce the control-plane size decision.
+	rescaleSettleDelay time.Duration
 
 	// bootstrap tracks the first-boot bootstrap protocol progress.
 	bootstrap bootstrapProgress
 	// joining tracks the first-boot joining path progress.
 	joining joiningProgress
+	// rescale tracks the rescaling workflow progress.
+	rescale rescaleProgress
 
 	// persistedState is the state left by a previous boot, nil on a first boot. Owned by the run loop.
 	persistedState *node.PersistedState
@@ -88,29 +98,43 @@ type Manager struct {
 // New creates a new Manager with the given configuration.
 func New(conf *config.Config, logger *slog.Logger, startedAt time.Time) *Manager {
 	var installer k3s.Installer
+	var clusterAdmin k3s.ClusterAdmin
+
 	if conf.K3sInstaller == config.InstallerFake {
 		fake := k3s.NewFakeInstaller(logger)
 		fake.SetInstalledRole(node.Role(conf.K3sFakeInstalledRole))
 		installer = fake
+		clusterAdmin = k3s.NewFakeClusterAdmin(logger)
 	} else {
 		installer = k3s.NewExecInstaller(conf.K3sToken, logger)
+		clusterAdmin = k3s.NewExecClusterAdmin(logger)
 	}
 
-	return newManager(conf, logger, startedAt, serfnode.New(conf, logger), installer)
+	return newManager(conf, logger, startedAt, serfnode.New(conf, logger), installer, clusterAdmin)
 }
 
 // newManager creates a new Manager from explicit dependencies.
-func newManager(conf *config.Config, logger *slog.Logger, startedAt time.Time, serf serfAPI, installer k3s.Installer) *Manager {
+func newManager(
+	conf *config.Config,
+	logger *slog.Logger,
+	startedAt time.Time,
+	serf serfAPI,
+	installer k3s.Installer,
+	clusterAdmin k3s.ClusterAdmin,
+) *Manager {
 	m := &Manager{
 		config:             conf,
 		logger:             logger,
 		startedAt:          startedAt,
 		serf:               serf,
 		installer:          installer,
+		clusterAdmin:       clusterAdmin,
 		commands:           make(chan command, 16),
 		state:              node.StateStarting,
 		bootstrapWaitDelay: bootstrapWaitDelay,
 		joinWaitDelay:      joinWaitDelay,
+		serverFailureGrace: conf.ServerFailureGrace,
+		rescaleSettleDelay: conf.RescaleSettleDelay,
 	}
 	m.stateView.Store(node.StateStarting)
 	return m
@@ -140,6 +164,7 @@ func (m *Manager) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			m.bootstrap.stopTimer()
 			m.joining.stopTimer()
+			m.rescale.stopTimer()
 			// no serf.Leave() here : it's reserved for the decommission workflow (not implemented yet)
 			m.logger.Info("manager shutting down")
 			return nil
@@ -255,6 +280,8 @@ func (m *Manager) handleCommand(c command) {
 		m.onBootstrapWaitExpired()
 	case cmdJoinWaitExpired:
 		m.onJoinWaitExpired()
+	case cmdRescaleCheck:
+		m.onRescaleCheck()
 	case cmdK3sOperationSucceeded:
 		m.onK3sOperationSucceeded()
 	case cmdK3sOperationFailed:
@@ -285,6 +312,10 @@ func (m *Manager) onK3sOperationSucceeded() {
 		m.onJoiningInstallSucceeded()
 	case node.StateRejoinCluster:
 		m.onRejoinReady()
+	case node.StateRescaleCoordinating:
+		m.onRescaleCoordinationDone()
+	case node.StateRescalePromoting, node.StateRescaleDemoting:
+		m.onRescaleConverted()
 	default:
 		m.logger.Warn("k3s operation succeeded in unexpected state", "state", m.state)
 	}
@@ -299,6 +330,10 @@ func (m *Manager) onK3sOperationFailed(err error) {
 		m.failJoining(fmt.Errorf("k3s installation failed: %w", err))
 	case node.StateRejoinCluster:
 		m.failRejoin(err)
+	case node.StateRescaleCoordinating:
+		m.abandonCoordination(err)
+	case node.StateRescalePromoting, node.StateRescaleDemoting:
+		m.failRescale(fmt.Errorf("k3s conversion failed: %w", err))
 	default:
 		m.logger.Warn("k3s operation failed in unexpected state", "state", m.state, "error", err)
 	}
@@ -318,5 +353,20 @@ func (m *Manager) handleSerfEvent(e serfnode.Event) {
 		m.maybeJoinCluster(view)
 		m.maybeInstallServer(view)
 		m.maybeInstallAgent(view)
+		m.maybeRescale(view)
+	}
+}
+
+// handleUserEvent dispatches a received Serf user event to the workflow that owns it.
+func (m *Manager) handleUserEvent(e serfnode.Event) {
+	switch e.Name {
+	case eventBootstrapRequested:
+		m.onBootstrapRequested()
+	case eventBootstrapStart:
+		m.onBootstrapStart()
+	case eventRescaleConvert:
+		m.onRescaleConvert(e.Payload)
+	default:
+		m.logger.Debug("ignoring unknown serf user event", "name", e.Name)
 	}
 }

@@ -1,6 +1,6 @@
 package cluster
 
-// First-boot joining path.
+// First-boot workflow: joining path.
 //
 // A virgin machine that starts beside a running cluster must never create a second one:
 // it joins the existing cluster without any user interaction.
