@@ -141,7 +141,7 @@ func (m *Manager) maybeRescale(view clusterView) {
 		return
 	}
 
-	evictable, nextEvictionDeadline := view.durablyFailedMembersNames(m.rescale.failedSince, m.serverFailureGrace, now)
+	evictable, nextEvictionDeadline := view.durablyFailedMembersNames(m.rescale.failedSince, m.evictionGrace, now)
 	if len(evictable) > 0 {
 		m.startEviction(evictable)
 		return
@@ -177,7 +177,7 @@ func (m *Manager) trackImbalance(view clusterView, now time.Time) (settled bool,
 // startEviction removes from the cluster the machines that have been gone for too long.
 func (m *Manager) startEviction(names []string) {
 	m.logger.Info("evicting the machines that are durably gone",
-		"nodes", names, "grace", m.serverFailureGrace)
+		"nodes", names, "grace", m.evictionGrace)
 
 	// Nodes are not drained: a machine Serf reports as failed answers nothing, so it cannot be asked to drain.
 

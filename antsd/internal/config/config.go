@@ -42,9 +42,9 @@ type Config struct {
 	// RescaleEnabled turns the rescaling workflow on.
 	RescaleEnabled bool
 
-	// ServerFailureGrace is how long a machine must stay continuously Serf-failed before it is evicted.
+	// EvictionGrace is how long a machine must stay continuously Serf-failed before it is evicted.
 	// It is long by default: a reboot or a basic maintenance must never trigger one.
-	ServerFailureGrace time.Duration
+	EvictionGrace time.Duration
 
 	// RescaleSettleDelay debounce the control-plane size decision, so a membership still
 	// settling down does not trigger a rescaling.
@@ -71,8 +71,8 @@ const (
 	defaultK3sInstaller = InstallerExec
 
 	defaultRescaleEnabled = true
-	//defaultServerFailureGrace = 12 * time.Hour
-	defaultServerFailureGrace = 2 * time.Minute
+	//defaultEvictionGrace = 12 * time.Hour
+	defaultEvictionGrace      = 2 * time.Minute
 	defaultRescaleSettleDelay = 30 * time.Second
 )
 
@@ -91,7 +91,7 @@ func Load() (*Config, error) {
 	flag.StringVar(&c.K3sToken, "k3s-token", envOr("ANTSD_K3S_TOKEN", ""), "Pre-shared K3s cluster join token")
 	flag.StringVar(&c.K3sFakeInstalledRole, "k3s-fake-installed-role", envOr("ANTSD_K3S_FAKE_INSTALLED_ROLE", ""), "Role the fake installer reports as already installed, to replay the rejoin path locally (server or agent)")
 	flag.BoolVar(&c.RescaleEnabled, "rescale-enabled", envOrBool("ANTSD_RESCALE_ENABLED", defaultRescaleEnabled), "Let the cluster repair its control plane automatically: eviction, promotion, demotion (turn off with -rescale-enabled=false)")
-	flag.DurationVar(&c.ServerFailureGrace, "server-failure-grace", envOrDuration("ANTSD_SERVER_FAILURE_GRACE", defaultServerFailureGrace), "How long a machine must stay unreachable before it is evicted from the cluster")
+	flag.DurationVar(&c.EvictionGrace, "rescale-eviction-grace", envOrDuration("ANTSD_RESCALE_EVICTION_GRACE", defaultEvictionGrace), "How long a machine must stay unreachable before it is evicted from the cluster")
 	flag.DurationVar(&c.RescaleSettleDelay, "rescale-settle-delay", envOrDuration("ANTSD_RESCALE_SETTLE_DELAY", defaultRescaleSettleDelay), "Debounce period before acting on a control plane that is off its target size")
 	flag.StringVar(&c.LogLevel, "log-level", envOr("ANTSD_LOG_LEVEL", defaultLogLevel), "Log level (debug, info, warn, error)")
 
@@ -126,8 +126,8 @@ func (c *Config) validate() error {
 	if c.K3sInstaller == InstallerExec && c.K3sToken == "" {
 		return fmt.Errorf("k3s-token is required with the %q installer", InstallerExec)
 	}
-	if c.ServerFailureGrace <= 0 {
-		return fmt.Errorf("server-failure-grace must be positive, got %s", c.ServerFailureGrace)
+	if c.EvictionGrace <= 0 {
+		return fmt.Errorf("rescale-eviction-grace must be positive, got %s", c.EvictionGrace)
 	}
 	if c.RescaleSettleDelay <= 0 {
 		return fmt.Errorf("rescale-settle-delay must be positive, got %s", c.RescaleSettleDelay)
@@ -187,10 +187,10 @@ func (c *Config) String() string {
 		tokenInfo = "set"
 	}
 	return fmt.Sprintf("Config{NodeName: %s, SerfBindAddr: %s, SerfBindPort: %d, HTTPPort: %d, StateFilePath: %s, "+
-		"K3sInstaller: %s, K3sToken: %s, RescaleEnabled: %t, ServerFailureGrace: %s, RescaleSettleDelay: %s, LogLevel: %s}",
+		"K3sInstaller: %s, K3sToken: %s, RescaleEnabled: %t, EvictionGrace: %s, RescaleSettleDelay: %s, LogLevel: %s}",
 		c.NodeName, c.SerfBindAddr, c.SerfBindPort, c.HTTPPort, c.StateFilePath,
 		c.K3sInstaller, tokenInfo,
-		c.RescaleEnabled, c.ServerFailureGrace, c.RescaleSettleDelay,
+		c.RescaleEnabled, c.EvictionGrace, c.RescaleSettleDelay,
 		c.LogLevel)
 }
 

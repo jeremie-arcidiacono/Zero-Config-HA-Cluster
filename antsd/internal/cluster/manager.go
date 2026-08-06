@@ -78,9 +78,9 @@ type Manager struct {
 	bootstrapWaitDelay time.Duration
 	// joinWaitDelay is the fb_joining_waiting grace period.
 	joinWaitDelay time.Duration
-	// serverFailureGrace is how long a machine must stay continuously Serf-failed before the
+	// evictionGrace is how long a machine must stay continuously Serf-failed before the
 	// rescaling workflow evicts it.
-	serverFailureGrace time.Duration
+	evictionGrace time.Duration
 	// rescaleSettleDelay debounce the control-plane size decision.
 	rescaleSettleDelay time.Duration
 
@@ -133,7 +133,7 @@ func newManager(
 		state:              node.StateStarting,
 		bootstrapWaitDelay: bootstrapWaitDelay,
 		joinWaitDelay:      joinWaitDelay,
-		serverFailureGrace: conf.ServerFailureGrace,
+		evictionGrace:      conf.EvictionGrace,
 		rescaleSettleDelay: conf.RescaleSettleDelay,
 	}
 	m.stateView.Store(node.StateStarting)
