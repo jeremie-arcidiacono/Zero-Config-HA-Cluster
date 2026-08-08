@@ -3,7 +3,7 @@ package k3s
 // Cluster-wide Kubernetes operations, using kubectl.
 //
 // Difference with the Installer:
-// Installer manage the local node's K3s installation, while admin acts on the cluster as a whole and can only
+// Installer manage the local node's K3s installation, while ControlPlane acts on the cluster as a whole and can only
 // run on a server.
 
 import (
@@ -23,9 +23,8 @@ const (
 	drainTimeout = 2 * time.Minute
 )
 
-// ClusterAdmin performs Kubernetes-level operations.
-// todo : rename to "K3sAdmin" ?
-type ClusterAdmin interface {
+// ControlPlane performs Kubernetes-level operations.
+type ControlPlane interface {
 	// DrainNode evicts the workloads hosted by a node, so they are rescheduled before it
 	// leaves the cluster or changes role.
 	DrainNode(ctx context.Context, name string) error
@@ -39,8 +38,8 @@ type ClusterAdmin interface {
 	NodeExists(ctx context.Context, name string) (bool, error)
 }
 
-// ExecClusterAdmin runs the operations through kubectl.
-type ExecClusterAdmin struct {
+// ExecControlPlane runs the operations through kubectl.
+type ExecControlPlane struct {
 	logger *slog.Logger
 
 	binPath        string
@@ -48,9 +47,9 @@ type ExecClusterAdmin struct {
 	drainTimeout   time.Duration
 }
 
-// NewExecClusterAdmin returns a ClusterAdmin driving the local K3s server.
-func NewExecClusterAdmin(logger *slog.Logger) *ExecClusterAdmin {
-	return &ExecClusterAdmin{
+// NewExecControlPlane returns a ControlPlane driving the local K3s server.
+func NewExecControlPlane(logger *slog.Logger) *ExecControlPlane {
+	return &ExecControlPlane{
 		logger:         logger,
 		binPath:        binPath,
 		kubeconfigPath: serverKubeconfigPath,
@@ -58,7 +57,7 @@ func NewExecClusterAdmin(logger *slog.Logger) *ExecClusterAdmin {
 	}
 }
 
-func (a *ExecClusterAdmin) DrainNode(ctx context.Context, name string) error {
+func (a *ExecControlPlane) DrainNode(ctx context.Context, name string) error {
 	a.logger.Info("draining node", "node", name, "timeout", a.drainTimeout)
 
 	_, err := a.kubectl(ctx, "drain", name,
@@ -69,14 +68,14 @@ func (a *ExecClusterAdmin) DrainNode(ctx context.Context, name string) error {
 	return err
 }
 
-func (a *ExecClusterAdmin) DeleteNode(ctx context.Context, name string) error {
+func (a *ExecControlPlane) DeleteNode(ctx context.Context, name string) error {
 	a.logger.Info("deleting node object", "node", name)
 
 	_, err := a.kubectl(ctx, "delete", "node", name, "--ignore-not-found")
 	return err
 }
 
-func (a *ExecClusterAdmin) NodeExists(ctx context.Context, name string) (bool, error) {
+func (a *ExecControlPlane) NodeExists(ctx context.Context, name string) (bool, error) {
 	output, err := a.kubectl(ctx, "get", "node", name, "--ignore-not-found", "-o", "name")
 	if err != nil {
 		return false, err
@@ -85,7 +84,7 @@ func (a *ExecClusterAdmin) NodeExists(ctx context.Context, name string) (bool, e
 }
 
 // kubectl runs one kubectl command on the local K3s server.
-func (a *ExecClusterAdmin) kubectl(ctx context.Context, args ...string) (string, error) {
+func (a *ExecControlPlane) kubectl(ctx context.Context, args ...string) (string, error) {
 	// If kubectl command is not the one brought by K3s, the --kubeconfig flag is required.
 	full := append([]string{"kubectl", "--kubeconfig", a.kubeconfigPath}, args...)
 

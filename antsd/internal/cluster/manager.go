@@ -64,7 +64,7 @@ type Manager struct {
 
 	serf         serfAPI
 	installer    k3s.Installer
-	clusterAdmin k3s.ClusterAdmin
+	controlPlane k3s.ControlPlane
 
 	ctx      context.Context
 	commands chan command
@@ -98,19 +98,19 @@ type Manager struct {
 // New creates a new Manager with the given configuration.
 func New(conf *config.Config, logger *slog.Logger, startedAt time.Time) *Manager {
 	var installer k3s.Installer
-	var clusterAdmin k3s.ClusterAdmin
+	var controlPlane k3s.ControlPlane
 
 	if conf.K3sInstaller == config.InstallerFake {
 		fake := k3s.NewFakeInstaller(logger)
 		fake.SetInstalledRole(node.Role(conf.K3sFakeInstalledRole))
 		installer = fake
-		clusterAdmin = k3s.NewFakeClusterAdmin(logger)
+		controlPlane = k3s.NewFakeControlPlane(logger)
 	} else {
 		installer = k3s.NewExecInstaller(conf.K3sToken, logger)
-		clusterAdmin = k3s.NewExecClusterAdmin(logger)
+		controlPlane = k3s.NewExecControlPlane(logger)
 	}
 
-	return newManager(conf, logger, startedAt, serfnode.New(conf, logger), installer, clusterAdmin)
+	return newManager(conf, logger, startedAt, serfnode.New(conf, logger), installer, controlPlane)
 }
 
 // newManager creates a new Manager from explicit dependencies.
@@ -120,7 +120,7 @@ func newManager(
 	startedAt time.Time,
 	serf serfAPI,
 	installer k3s.Installer,
-	clusterAdmin k3s.ClusterAdmin,
+	controlPlane k3s.ControlPlane,
 ) *Manager {
 	m := &Manager{
 		config:             conf,
@@ -128,7 +128,7 @@ func newManager(
 		startedAt:          startedAt,
 		serf:               serf,
 		installer:          installer,
-		clusterAdmin:       clusterAdmin,
+		controlPlane:       controlPlane,
 		commands:           make(chan command, 16),
 		state:              node.StateStarting,
 		bootstrapWaitDelay: bootstrapWaitDelay,

@@ -101,9 +101,9 @@ func (f *FakeInstaller) simulate(ctx context.Context, operation, serverIP string
 	}
 }
 
-// FakeClusterAdmin is the ClusterAdmin counterpart of FakeInstaller: every operation logs,
+// FakeControlPlane is the ControlPlane counterpart of FakeInstaller: every operation logs,
 // waits a short delay, and succeeds.
-type FakeClusterAdmin struct {
+type FakeControlPlane struct {
 	logger *slog.Logger
 
 	// Delay overrides fakeInstallDelay when set (used by tests to run faster).
@@ -113,16 +113,16 @@ type FakeClusterAdmin struct {
 	deleted map[string]bool
 }
 
-// NewFakeClusterAdmin returns a ClusterAdmin that only simulates cluster operations.
-func NewFakeClusterAdmin(logger *slog.Logger) *FakeClusterAdmin {
-	return &FakeClusterAdmin{logger: logger, Delay: fakeInstallDelay, deleted: make(map[string]bool)}
+// NewFakeControlPlane returns a ControlPlane that only simulates cluster operations.
+func NewFakeControlPlane(logger *slog.Logger) *FakeControlPlane {
+	return &FakeControlPlane{logger: logger, Delay: fakeInstallDelay, deleted: make(map[string]bool)}
 }
 
-func (f *FakeClusterAdmin) DrainNode(ctx context.Context, name string) error {
+func (f *FakeControlPlane) DrainNode(ctx context.Context, name string) error {
 	return f.simulate(ctx, "drain node", name)
 }
 
-func (f *FakeClusterAdmin) DeleteNode(ctx context.Context, name string) error {
+func (f *FakeControlPlane) DeleteNode(ctx context.Context, name string) error {
 	if err := f.simulate(ctx, "delete node", name); err != nil {
 		return err
 	}
@@ -130,12 +130,12 @@ func (f *FakeClusterAdmin) DeleteNode(ctx context.Context, name string) error {
 	return nil
 }
 
-func (f *FakeClusterAdmin) NodeExists(_ context.Context, name string) (bool, error) {
+func (f *FakeControlPlane) NodeExists(_ context.Context, name string) (bool, error) {
 	return !f.deleted[name], nil
 }
 
-func (f *FakeClusterAdmin) simulate(ctx context.Context, operation, name string) error {
-	f.logger.Info("fake k3s admin", "operation", operation, "node", name)
+func (f *FakeControlPlane) simulate(ctx context.Context, operation, name string) error {
+	f.logger.Info("fake k3s control_plane", "operation", operation, "node", name)
 
 	select {
 	case <-ctx.Done():

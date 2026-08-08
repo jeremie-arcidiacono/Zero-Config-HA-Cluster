@@ -189,7 +189,7 @@ func (m *Manager) startEviction(names []string) {
 
 	m.startK3sOperation(func(ctx context.Context) error {
 		for _, name := range names {
-			if err := m.clusterAdmin.DeleteNode(ctx, name); err != nil {
+			if err := m.controlPlane.DeleteNode(ctx, name); err != nil {
 				return fmt.Errorf("delete the node object of %s: %w", name, err)
 			}
 		}
@@ -276,16 +276,16 @@ func (m *Manager) chooseConversionTarget(view clusterView) (admin.Member, node.R
 // prepareConversion drain the designated machine and removes it from the K3s cluster, so it can
 // register again with its new role.
 func (m *Manager) prepareConversion(ctx context.Context, name string) error {
-	if err := m.clusterAdmin.DrainNode(ctx, name); err != nil {
+	if err := m.controlPlane.DrainNode(ctx, name); err != nil {
 		// A pod that refuses to move must not block a degraded cluster, and the DeleteNode evicts it anyway.
 		m.logger.Warn("draining the machine before its conversion failed, deleting it anyway",
 			"node", name, "error", err)
 	}
-	if err := m.clusterAdmin.DeleteNode(ctx, name); err != nil {
+	if err := m.controlPlane.DeleteNode(ctx, name); err != nil {
 		return fmt.Errorf("delete the node object of %s: %w", name, err)
 	}
 
-	exists, err := m.clusterAdmin.NodeExists(ctx, name)
+	exists, err := m.controlPlane.NodeExists(ctx, name)
 	if err != nil {
 		return fmt.Errorf("check that %s left the cluster: %w", name, err)
 	}
