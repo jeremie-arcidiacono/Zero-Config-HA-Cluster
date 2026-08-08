@@ -33,8 +33,9 @@ import (
 )
 
 const (
-	// rescaleReadyTimeout bounds the wait for a freshly converted K3s to report ready.
-	rescaleReadyTimeout = 5 * time.Minute
+	// rescaleConvertTimeout bounds a whole conversion: reinstalling K3s with the other role, then
+	// waiting for it to report ready. See firstBootTimeout for more info.
+	rescaleConvertTimeout = 10 * time.Minute
 )
 
 // eventRescaleConvert carries the coordinator's order to the machine that must change role.
@@ -368,6 +369,10 @@ func (m *Manager) onRescaleConvert(payload []byte) {
 
 // convertThenWaitReady reinstall the local K3s with its new role and waits for it to be ready.
 func (m *Manager) convertThenWaitReady(ctx context.Context, order rescaleOrder) error {
+	// One timeout for the whole sequence
+	ctx, cancel := context.WithTimeout(ctx, rescaleConvertTimeout)
+	defer cancel()
+
 	if err := m.installer.Convert(ctx, order.Role, order.JoinIP); err != nil {
 		return err
 	}
@@ -380,16 +385,13 @@ func (m *Manager) convertThenWaitReady(ctx context.Context, order rescaleOrder) 
 		return fmt.Errorf("k3s is installed as %q but should be %q", installed, order.Role)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, rescaleReadyTimeout)
-	defer cancel()
-
 	waitReady := m.installer.WaitAgentReady
 	if order.Role == node.RoleServer {
 		waitReady = m.installer.WaitServerReady
 	}
 	if err := waitReady(ctx); err != nil {
-		return fmt.Errorf("k3s did not become ready as %q within %s: %w",
-			order.Role, rescaleReadyTimeout, err)
+		return fmt.Errorf("k3s was not converted to %q and ready within %s: %w",
+			order.Role, rescaleConvertTimeout, err)
 	}
 	return nil
 }
