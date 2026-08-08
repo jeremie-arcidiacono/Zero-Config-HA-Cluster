@@ -48,15 +48,12 @@ const (
 
 	// StateJoiningWaiting means the node discovered an existing cluster on its
 	// first boot: it advertises itself as a candidate and lets the membership
-	// settle before deciding with which role it joins.
+	// settle before picking the server it joins through.
 	StateJoiningWaiting State = "fb_joining_waiting"
 
-	// StateJoiningServer means the node is installing K3s as an additional
-	// server of the cluster it discovered.
-	StateJoiningServer State = "fb_joining_server"
-
 	// StateJoiningAgent means the node is installing K3s as an agent of the
-	// cluster it discovered.
+	// cluster it discovered. A newcomer always joins as an agent, whatever the
+	// size of the control plane: growing it belongs to the rescaling workflow.
 	StateJoiningAgent State = "fb_joining_agent"
 
 	// StateJoiningFailed is a terminal state: the node could not join the

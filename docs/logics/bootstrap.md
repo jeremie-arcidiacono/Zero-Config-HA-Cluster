@@ -24,10 +24,9 @@ Ce qui nous donne les états suivants :
 
 - `fb_discovering` : découverte des autres machines, affichage sur écran
 - `fb_joining_XXXX` : la machine a découvert un cluster existant, elle le rejoint (aucune action utilisateur)
-    - `fb_joining_waiting` : un server à rejoindre a été vu, on laisse le membership se stabiliser avant de décider du
-      rôle
-    - `fb_joining_server` : la machine installe K3s en mode server
-    - `fb_joining_agent` : la machine installe K3s en mode agent
+    - `fb_joining_waiting` : un server à rejoindre a été vu, on laisse le membership se stabiliser avant de choisir la
+      cible du join
+    - `fb_joining_agent` : la machine installe K3s en mode agent.
     - `fb_joining_failed` : échec du processus de joining. la machine ne progresse plus
 - `stable_XXXX` : la machine fait partie d'un cluster K3s, cet état ne fait plus partie du protocole de 1er démarrage
     - `stable_server` : la machine est un server K3s
@@ -43,8 +42,8 @@ Ce qui nous donne les états suivants :
       N0
     - `fb_bootstrap_install_agent` : les machines N3+ installent K3s en mode agent, en rejoignant le cluster de N0
     - `fb_bootstrap_failed` : échec du processus de bootstrapping, la machine ne progresse plus. Soit : le
-      script d'installation K3s retourne une erreur, ou le K3s fraîchement installé ne se déclare pas prêt dans les
-      5 minutes.
+      script d'installation K3s retourne une erreur, ou l'installation ne se déclare pas prête dans les 10 minutes
+      (ce délai couvre le script d'installation et la probe de readiness).
 
 Tous les états sont préfixés par "fb-" pour "first boot", afin de les différencier des états globaux du reste du cycle
 de vie d'antsd.
@@ -59,11 +58,11 @@ flowchart TD
     A -- Détection d'un server à rejoindre --> E[fb_joining_waiting\nAttente X sec\nÉcran B]
     C -- Détection d'un server hors de sa cohorte --> E
     D -- Détection d'un server hors de sa cohorte --> E
-    E --> J{Nb de servers engagé\n< min 3, N ?}
-    J -- Oui --> K[fb_joining_server\nInstallation de \nk3s server]
-    J -- Non --> L[fb_joining_agent\nInstallation de \nk3s agent]
+    E --> L[fb_joining_agent\nInstallation de \nk3s agent]
+    L -- Si la population le demande --> M[Promotion par le rescaling\nvoir rescaling.md]
     style C fill: #664600, color: #000
     style D fill: #664600, color: #000
+    style M fill: #1f3a5f, color: #fff
 ```
 
 ## Interaction utilisateur avec l'écran embarqué sur la machine ANTS
@@ -196,32 +195,39 @@ dont tous les servers sont en `rejoin_cluster` ou `failed` n'est pas rejoignable
 
 ### Choix du rôle
 
-`fb_joining_waiting` démarre un timer, comme `fb_bootstrap_waiting` : le rôle dépend de ce qu'on voit du cluster, il
-faut laisser le membership arriver. La décision est ensuite réévaluée à chaque événement Serf.
+Une machine qui rejoint un cluster existant s'installe toujours en agent. Si la population nécessite un server de
+plus, c'est le coordinateur du [rescaling](rescaling.md) qui la promeut ensuite. Le joining ne dimensionne jamais le
+control plane.
 
-Un slot de server est libre si `nb de servers engagés < min(3, nb de machines connues)` :
+`fb_joining_waiting` démarre quand même un timer, comme `fb_bootstrap_waiting` : il laisse le membership arriver avant
+de choisir la cible du join. La décision est réévaluée à chaque événement Serf.
+Une machine qui ne voit plus aucun server joignable attend, elle ne retombe jamais sur le bootstrapping.
 
-- **engagé** signifie être un server ou être en train d'en installer un (`stable_server`,
-  `fb_bootstrap_install_init`, `fb_bootstrap_install_servers`, `fb_joining_server`). Compter les installations en
-  cours évite que deux machines visent le même slot.
-- **connu** et **engagé** comptent les membres `failed` : un server tombé garde sa place, le remplacer est la
-  responsabilité du rescaling, pas du joining. Seul un membre `left` (décommissionné) sort du compte.
+Les agents ne touchent pas au membership etcd, donc les machines qui arrivent s'installent en parallèle, sans prendre le
+mutex `isEtcdMembershipChanging()`.
 
-Si un slot est libre, la machine s'installe en server, sinon en agent.
+#### Pourquoi pas de join en server
 
-Comme pour le bootstrapping, les servers s'installent un à la fois (contrainte etcd) et les agents en parallèle.
-Mais le rang du bootstrapping ne peut pas servir ici : les machines arrivent à des instants arbitraires. Le tour est
-donc pris par la machine au nom le plus petit parmi celles en `fb_joining_waiting`, et seulement si aucune machine du
-cluster ne modifie le membership etcd à cet instant (`fb_bootstrap_install_init`, `fb_bootstrap_install_servers`,
-`fb_joining_server`, et `rejoin_cluster`).
+La première version choisissait le rôle : un slot de server était libre si
+`nb de servers engagés < DesiredServerCount(population)`, et la machine s'installait alors en server.
+Ce mécanisme a été retiré après un test sur les raspberry, pour deux raisons.
 
-`rejoin_cluster` en fait partie meme si un redémarrage n'ajoute aucun membre etcd : c'est un server potentiellement
-absent du quorum, et faire grossir etcd pendant ce temps est risqué. Contrairement aux comptages de slots, seuls les
-membres **alive** sont regardés.
-Donc une machine vivante bloquée longtemps en `rejoin_cluster` (K3s installé mais n'arrive pas à démarrer, antsd attend
-indéfiniment) empêche le join d'un server.
+1. Une machine qui démarre **après** une panne n'apprend jamais l'existence du membre tombé. La panne n'entre donc
+   jamais
+   dans son memberlist. Le test : une 4eme machine démarre à côté d'un cluster de 3 (dont 1 server down) ne voyait
+   que 3 membres au lieu de 4 : elle comptait 2 servers pour 3 machines, croyait un slot libre, et s'installait en
+   server.
 
-Un agent, n'attend pas le quorum complet contrairement au bootstrapping.
+2. etcd refuse de grossir pendant qu'un de ses membres est injoignable. C'est le `strict-reconfig-check` d'etcd . La
+   règle est la même que celle du rescaling (éviction avant promotion) : il faut retirer le membre mort
+   avant d'en ajouter un. Or `fb_joining_server` faisait partie du mutex etcd, donc la machine bloquée y retenait
+   justement le mutex dont l'éviction du membre mort avait besoin : deadlock.
+
+Faire décider le coordinateur (un `stable_server` qui voit tout le cluster) supprime le problème.
+Le coût est un cycle d'installation supplémentaire pour une machine destinée à devenir server : agent d'abord,
+conversion ensuite.
+
+Au final, on est revenu à la première intuition : joining reste simple, la logique de server/agent est dans rescaling.
 
 ## Échec pendant le premier démarrage
 
@@ -231,8 +237,8 @@ selon la branche empruntée.
 La procédure de reprise est un factory reset de cette machine, et pas un simple redémarrage :
 
 - `becomeStable` est le seul endroit qui écrit le fichier d'état, donc une machine tombée en `fb_bootstrap_failed` n'en
-  a pas. Mais elle peut avoir un K3s installé, par exemple si l'échec est le timeout de 5 min sur la
-  probe de readiness : le script d'installation a réussi, et la machine est peut-être déjà membre de l'etcd.
+  a pas. Mais elle peut avoir un K3s installé, par exemple si l'échec est le timeout de 10 min : le script
+  d'installation a réussi, et la machine est peut-être déjà membre de l'etcd.
   Un redémarrage relance K3s (car il est enable dans systemd) pendant qu'antsd (qui ne trouve pas de fichier d'état)
   relance le premier démarrage et réinstalle par-dessus des données.
 - Un factory reset (uninstall K3s + suppression du fichier persisté) est plus sûr.

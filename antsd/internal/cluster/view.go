@@ -91,15 +91,15 @@ func (v clusterView) population() int {
 }
 
 // desiredServerCount returns the number of K3s servers this population needs.
-// Every decision that adds or removes a server reads this same value (prevent the joining path and the
-// rescaling workflow from interfering with each other)
+// Every decision that adds or removes a server reads this same value.
 func (v clusterView) desiredServerCount() int {
 	return node.DesiredServerCount(v.population())
 }
 
 // needsAnotherK3sServer reports whether the cluster is still missing a K3s server.
 //
-// A failed member keeps its place: replacing a dead server is the rescaling workflow's job.
+// A failed member keeps its place: it may come back with its data, and etcd refuses to
+// grow while one of its members is unreachable anyway.
 func (v clusterView) needsAnotherK3sServer() bool {
 	return v.k3sServerCount() < v.desiredServerCount()
 }
@@ -122,7 +122,7 @@ func (v clusterView) k3sServerCount() int {
 }
 
 // isEtcdMembershipChanging reports whether a member is currently altering the etcd membership.
-// Only alive members count (a machine that died mid-installation doesn't block later join).
+// Only alive members count (a machine that died mid-installation doesn't block).
 func (v clusterView) isEtcdMembershipChanging() bool {
 	for _, member := range v.snapshot.Members {
 		if member.Status == memberStatusAlive && isNodeChangingEtcdMembership(node.State(member.Tags["state"])) {
@@ -130,21 +130,6 @@ func (v clusterView) isEtcdMembershipChanging() bool {
 		}
 	}
 	return false
-}
-
-// isFirstWaitingJoiner reports whether self holds the turn among the nodes waiting to join.
-// The lowest name win.
-func (v clusterView) isFirstWaitingJoiner(self string) bool {
-	for _, member := range v.snapshot.Members {
-		if member.Status != memberStatusAlive ||
-			member.Tags["state"] != string(node.StateJoiningWaiting) {
-			continue
-		}
-		if member.Name < self {
-			return false
-		}
-	}
-	return true
 }
 
 // isRescaleCoordinator reports whether self holds the turn to repair the cluster.
@@ -249,7 +234,6 @@ func isNodeAK3sServer(state node.State) bool {
 	case node.StateStableServer,
 		node.StateBootstrapInstallInit,
 		node.StateBootstrapInstallServer,
-		node.StateJoiningServer,
 		node.StateRescaleCoordinating,
 		node.StateRescalePromoting:
 		return true
@@ -267,7 +251,6 @@ func isNodeChangingEtcdMembership(state node.State) bool {
 	switch state {
 	case node.StateBootstrapInstallInit,
 		node.StateBootstrapInstallServer,
-		node.StateJoiningServer,
 		node.StateRejoinCluster,
 		node.StateRescaleCoordinating,
 		node.StateRescalePromoting,

@@ -308,7 +308,7 @@ func (m *Manager) onK3sOperationSucceeded() {
 	switch m.state {
 	case node.StateBootstrapInstallInit, node.StateBootstrapInstallServer, node.StateBootstrapInstallAgent:
 		m.onBootstrapInstallSucceeded()
-	case node.StateJoiningServer, node.StateJoiningAgent:
+	case node.StateJoiningAgent:
 		m.onJoiningInstallSucceeded()
 	case node.StateRejoinCluster:
 		m.onRejoinReady()
@@ -326,7 +326,7 @@ func (m *Manager) onK3sOperationFailed(err error) {
 	switch m.state {
 	case node.StateBootstrapInstallInit, node.StateBootstrapInstallServer, node.StateBootstrapInstallAgent:
 		m.failBootstrap(fmt.Errorf("k3s installation failed: %w", err))
-	case node.StateJoiningServer, node.StateJoiningAgent:
+	case node.StateJoiningAgent:
 		m.failJoining(fmt.Errorf("k3s installation failed: %w", err))
 	case node.StateRejoinCluster:
 		m.failRejoin(err)

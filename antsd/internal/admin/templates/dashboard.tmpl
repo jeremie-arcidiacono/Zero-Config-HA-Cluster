@@ -159,7 +159,7 @@
 <div class="actions">
     <p>An existing cluster was found on the network. This machine joins it automatically, no action needed.</p>
 </div>
-{{ else if or (eq .State "fb_joining_server") (eq .State "fb_joining_agent") }}
+{{ else if eq .State "fb_joining_agent" }}
 <div class="actions">
     <p>Installing K3s and joining the existing cluster...</p>
 </div>

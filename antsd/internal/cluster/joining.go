@@ -6,10 +6,11 @@ package cluster
 // it joins the existing cluster without any user interaction.
 //
 // The node moves to fb_joining_waiting as soon as it sees a joinable server, and lets a grace
-// timer run so the whole membership (and its tags) reaches it before the role is decided.
-// It then joins as a server while the cluster misses one, as an agent otherwise.
-// Server joins are sequential cluster-wide (etcd admits a single member change at a time),
-// agents install in parallel since they never touch the etcd membership.
+// timer run so the membership (and its tags) reaches it before the join target is picked.
+// It then always installs K3s as an agent: sizing the control plane belongs to the rescaling
+// workflow, which promotes this machine afterward if the population needs it.
+// An agent never touches the etcd membership, so joining machines install in parallel and take no
+// cluster-wide turn.
 //
 // The decision is re-evaluated on every Serf event: a node that sees no reachable
 // server simply waits, it never falls back to the bootstrap protocol.
@@ -22,7 +23,7 @@ import (
 )
 
 // joinWaitDelay is the grace period spent in fb_joining_waiting so that the
-// membership settles before the role is decided.
+// membership settles before the join target is picked.
 const joinWaitDelay = 10 * time.Second
 
 // joiningProgress carries the joining path state between run-loop iterations.
@@ -30,7 +31,7 @@ type joiningProgress struct {
 	// timer is the fb_joining_waiting grace timer.
 	timer *time.Timer
 
-	// settled tells whether the grace period is over, meaning the role can be decided.
+	// settled tells whether the grace period is over, meaning the node can install.
 	settled bool
 }
 
@@ -71,7 +72,7 @@ func (m *Manager) maybeStartJoiningPath(view clusterView) {
 	})
 }
 
-// onJoinWaitExpired ends the grace period and decides the role, in case no further Serf event comes.
+// onJoinWaitExpired ends the grace period, in case no further Serf event comes.
 func (m *Manager) onJoinWaitExpired() {
 	if m.state != node.StateJoiningWaiting {
 		return
@@ -81,8 +82,7 @@ func (m *Manager) onJoinWaitExpired() {
 	m.maybeJoinCluster(m.observeCluster())
 }
 
-// maybeJoinCluster starts the K3s installation once the grace period is over, a
-// server is reachable and, for a server join, it is this node's turn.
+// maybeJoinCluster starts the K3s installation once the grace period is over and a server is reachable.
 func (m *Manager) maybeJoinCluster(view clusterView) {
 	if m.state != node.StateJoiningWaiting || !m.joining.settled {
 		return
@@ -93,28 +93,7 @@ func (m *Manager) maybeJoinCluster(view clusterView) {
 	if !found {
 		return
 	}
-
-	if !view.needsAnotherK3sServer() {
-		m.joinAsAgent(target.IP)
-		return
-	}
-	if view.isEtcdMembershipChanging() || !view.isFirstWaitingJoiner(m.config.NodeName) {
-		return // Servers join one at a time, lowest name first.
-	}
-	m.joinAsServer(target.IP)
-}
-
-// joinAsServer installs K3s as an additional server of the discovered cluster.
-func (m *Manager) joinAsServer(serverIP string) {
-	m.logger.Info("joining the existing cluster as a server", "server_ip", serverIP)
-
-	m.transition(node.StateJoiningServer)
-	m.startK3sOperation(func(ctx context.Context) error {
-		return m.installThenWaitReady(
-			ctx,
-			func(ctx context.Context) error { return m.installer.InstallServerJoin(ctx, serverIP) },
-			m.installer.WaitServerReady)
-	})
+	m.joinAsAgent(target.IP)
 }
 
 // joinAsAgent installs K3s as an agent of the discovered cluster.
@@ -132,10 +111,7 @@ func (m *Manager) joinAsAgent(serverIP string) {
 
 // onJoiningInstallSucceeded finalizes the installation that just completed.
 func (m *Manager) onJoiningInstallSucceeded() {
-	switch m.state {
-	case node.StateJoiningServer:
-		m.becomeStable(m.buildFirstBootState(node.RoleServer))
-	case node.StateJoiningAgent:
+	if m.state == node.StateJoiningAgent {
 		m.becomeStable(m.buildFirstBootState(node.RoleAgent))
 	}
 }
