@@ -98,34 +98,33 @@ func (d *Discoverer) pollLoop(ctx context.Context) {
 			}
 			return
 		case <-ticker.C:
-			d.lookupOnce() //todo : use a goroutine ?
+			// Lookups must stay sequential: handleEntry owns d.seen without a lock.
+			d.lookupOnce()
 		}
 	}
 }
 
-// lookupOnce performs a single mDNS lookup and calls handleEntry for each discovered peer.
-func (d *Discoverer) lookupOnce() {
-	entriesCh := make(chan *mdns.ServiceEntry, 8)
-	doneCh := make(chan struct{})
+// entriesBufferSize bounds how many peers a single lookup can report.
+const entriesBufferSize = 64
 
-	go func() {
-		defer close(doneCh)
-		for entry := range entriesCh {
-			d.handleEntry(entry)
-		}
-	}()
+// lookupOnce performs a single mDNS lookup and calls handleEntry for each discovered peer.
+//
+// Entries are drained only once mdns.Query has returned, never while it runs: avoid a data race.
+func (d *Discoverer) lookupOnce() {
+	entriesCh := make(chan *mdns.ServiceEntry, entriesBufferSize)
 
 	params := mdns.DefaultParams(serviceName(d.config.ClusterName))
 	params.Entries = entriesCh
 	params.Logger = logbridge.NewQuietStdLogger(d.logger, "MDNS")
 
-	//params.Timeout = 2 * time.Second
-
 	if err := mdns.Query(params); err != nil {
 		d.logger.Warn("mdns query failed", "error", err)
 	}
 	close(entriesCh)
-	<-doneCh
+
+	for entry := range entriesCh {
+		d.handleEntry(entry)
+	}
 }
 
 // handleEntry is called for each discovered mDNS entry. It checks if the peer is already known, and if not, it calls the onFind callback.
