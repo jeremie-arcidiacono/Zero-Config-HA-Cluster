@@ -12,8 +12,12 @@ import (
 	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/node"
 )
 
-// firstBootReadyTimeout bounds the wait for a freshly installed K3s to report ready.
-const firstBootReadyTimeout = 5 * time.Minute
+// firstBootTimeout bounds a whole first-boot installation: running the K3s install script and then waiting
+// for it to report ready.
+//
+// It is generous: expiring here put a terminal state (a factory reset is the only way out).
+// The bound exists to guarantee the node stops holding the etcd mutex.
+const firstBootTimeout = 10 * time.Minute
 
 // ensureK3sIsNotInstalled refuses a first-boot installation on a node that already runs K3s.
 //
@@ -51,6 +55,10 @@ func (m *Manager) installThenWaitReady(
 		return err
 	}
 
+	// One timeout for the whole sequence
+	ctx, cancel := context.WithTimeout(ctx, firstBootTimeout)
+	defer cancel()
+
 	if err := install(ctx); err != nil {
 		// roleErr check if the installation left a systemd unit (it also covers an ambiguous double role installation)
 		if _, roleErr := m.installer.InstalledRole(ctx); roleErr != nil {
@@ -59,16 +67,9 @@ func (m *Manager) installThenWaitReady(
 		m.logger.Warn("k3s install script reported a failure but wrote its systemd unit, "+
 			"letting the readiness probe decide", "error", err)
 	}
-	return waitFirstBootReady(ctx, waitReady)
-}
-
-// waitFirstBootReady runs a readiness probe with the first-boot deadline.
-func waitFirstBootReady(ctx context.Context, waitReady func(context.Context) error) error {
-	ctx, cancel := context.WithTimeout(ctx, firstBootReadyTimeout)
-	defer cancel()
 
 	if err := waitReady(ctx); err != nil {
-		return fmt.Errorf("k3s did not become ready within %s: %w", firstBootReadyTimeout, err)
+		return fmt.Errorf("k3s was not installed and ready within %s: %w", firstBootTimeout, err)
 	}
 	return nil
 }

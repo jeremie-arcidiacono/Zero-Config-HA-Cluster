@@ -17,6 +17,9 @@ type PersistedState struct {
 	Role                 Role      `json:"role"`
 	BootCount            int       `json:"boot_count"`
 	FirstBootCompletedAt time.Time `json:"first_boot_completed_at"`
+
+	// RoleChangedAt is when rescaling last changed this node's role. Zero if never changed.
+	RoleChangedAt time.Time `json:"role_changed_at"`
 }
 
 // Save writes the state as JSON to a path.
@@ -43,6 +46,7 @@ func (s PersistedState) Save(path string) error {
 		_ = os.Remove(tmpName)
 		return fmt.Errorf("write temp state file: %w", err)
 	}
+	// todo : add a tmp.Sync ?
 	if err := tmp.Close(); err != nil {
 		_ = os.Remove(tmpName)
 		return fmt.Errorf("close temp state file: %w", err)
@@ -52,6 +56,7 @@ func (s PersistedState) Save(path string) error {
 		_ = os.Remove(tmpName)
 		return fmt.Errorf("rename temp state file to %s: %w", path, err)
 	}
+	// todo: add a sync after the rename ?
 	return nil
 }
 

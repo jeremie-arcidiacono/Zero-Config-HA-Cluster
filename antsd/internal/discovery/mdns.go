@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/mdns"
@@ -98,39 +100,50 @@ func (d *Discoverer) pollLoop(ctx context.Context) {
 			}
 			return
 		case <-ticker.C:
-			d.lookupOnce() //todo : use a goroutine ?
+			// Lookups must stay sequential: handleEntry owns d.seen without a lock.
+			d.lookupOnce()
 		}
 	}
 }
 
-// lookupOnce performs a single mDNS lookup and calls handleEntry for each discovered peer.
-func (d *Discoverer) lookupOnce() {
-	entriesCh := make(chan *mdns.ServiceEntry, 8)
-	doneCh := make(chan struct{})
+// entriesBufferSize bounds how many peers a single lookup can report.
+const entriesBufferSize = 64
 
-	go func() {
-		defer close(doneCh)
-		for entry := range entriesCh {
-			d.handleEntry(entry)
-		}
-	}()
+// lookupOnce performs a single mDNS lookup and calls handleEntry for each discovered peer.
+//
+// Entries are drained only once mdns.Query has returned, never while it runs: avoid a data race.
+func (d *Discoverer) lookupOnce() {
+	entriesCh := make(chan *mdns.ServiceEntry, entriesBufferSize)
 
 	params := mdns.DefaultParams(serviceName(d.config.ClusterName))
 	params.Entries = entriesCh
 	params.Logger = logbridge.NewQuietStdLogger(d.logger, "MDNS")
 
-	//params.Timeout = 2 * time.Second
-
 	if err := mdns.Query(params); err != nil {
 		d.logger.Warn("mdns query failed", "error", err)
 	}
 	close(entriesCh)
-	<-doneCh
+
+	for entry := range entriesCh {
+		d.handleEntry(entry)
+	}
 }
 
 // handleEntry is called for each discovered mDNS entry. It checks if the peer is already known, and if not, it calls the onFind callback.
 func (d *Discoverer) handleEntry(entry *mdns.ServiceEntry) {
-	addr := net.JoinHostPort(entry.AddrV4.String(), fmt.Sprintf("%d", entry.Port))
+	// The mDNS client parses every record reaching the multicast group, not only the answers to
+	// our own query, so unrelated services show up here.
+	if !strings.HasSuffix(entry.Name, instanceSuffix(d.config.ClusterName)) {
+		//d.logger.Debug("ignoring mdns entry from another service", "name", entry.Name)
+		return
+	}
+
+	if len(entry.AddrV4) == 0 {
+		//d.logger.Debug("ignoring mdns entry without an IPv4 address", "name", entry.Name)
+		return
+	}
+
+	addr := net.JoinHostPort(entry.AddrV4.String(), strconv.Itoa(entry.Port))
 
 	if _, ok := d.seen[addr]; ok {
 		return // already known, avoid redundant Join calls
@@ -144,4 +157,13 @@ func (d *Discoverer) handleEntry(entry *mdns.ServiceEntry) {
 // serviceName returns the service name to register and to lookup.
 func serviceName(clusterName string) string {
 	return fmt.Sprintf("_antsd-%s._tcp", clusterName)
+}
+
+// mdnsDomain is the domain the client queries in (mdns.DefaultParams default).
+const mdnsDomain = "local"
+
+// instanceSuffix returns the FQDN suffix shared by every instance name of our service,
+// e.g. "._antsd-<cluster>._tcp.local." for "<node>._antsd-<cluster>._tcp.local.".
+func instanceSuffix(clusterName string) string {
+	return fmt.Sprintf(".%s.%s.", serviceName(clusterName), mdnsDomain)
 }

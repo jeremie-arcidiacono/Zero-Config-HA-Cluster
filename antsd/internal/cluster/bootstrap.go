@@ -1,6 +1,6 @@
 package cluster
 
-// First-boot bootstrap protocol.
+// First-boot workflow: bootstrap path.
 //
 // A node that discovered no existing cluster stays in fb_discovering until
 // its user requests the creation of a new cluster.
@@ -20,7 +20,6 @@ import (
 
 	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/admin"
 	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/node"
-	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/serfnode"
 )
 
 // bootstrapWaitDelay is the grace period spent in fb_bootstrap_waiting so
@@ -121,18 +120,6 @@ func (m *Manager) onConfirmBootstrap() error {
 	return nil
 }
 
-// handleUserEvent dispatches a bootstrap protocol event.
-func (m *Manager) handleUserEvent(e serfnode.Event) {
-	switch e.Name {
-	case eventBootstrapRequested:
-		m.onBootstrapRequested()
-	case eventBootstrapStart:
-		m.onBootstrapStart()
-	default:
-		m.logger.Debug("ignoring unknown serf user event", "name", e.Name)
-	}
-}
-
 // onBootstrapRequested moves a first-boot node to fb_bootstrap_waiting and starts the timer.
 func (m *Manager) onBootstrapRequested() {
 	if m.state != node.StateDiscovering && m.state != node.StateBootstrapConfirm {
@@ -169,7 +156,7 @@ func (m *Manager) onBootstrapStart() {
 
 	view := m.observeCluster()
 
-	names := view.aliveNames()
+	names := view.aliveMemberNames()
 	rank, err := node.Rank(names, m.config.NodeName)
 	if err != nil {
 		m.failBootstrap(fmt.Errorf("compute rank: %w", err))

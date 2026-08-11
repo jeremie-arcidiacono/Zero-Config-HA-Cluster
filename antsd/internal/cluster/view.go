@@ -6,6 +6,9 @@ package cluster
 // cluster), not Serf related: that's why some of those methods don't go in serfnode package
 
 import (
+	"slices"
+	"time"
+
 	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/admin"
 	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/node"
 )
@@ -32,8 +35,8 @@ func (m *Manager) observeCluster() clusterView {
 	return clusterView{snapshot: m.serf.Snapshot()}
 }
 
-// aliveNames returns the names of all alive Serf members, this node included.
-func (v clusterView) aliveNames() []string {
+// aliveMemberNames returns the names of all alive Serf members, this node included.
+func (v clusterView) aliveMemberNames() []string {
 	names := make([]string, 0, len(v.snapshot.Members))
 	for _, member := range v.snapshot.Members {
 		if member.Status == memberStatusAlive {
@@ -46,19 +49,8 @@ func (v clusterView) aliveNames() []string {
 // findK3sJoinTarget returns the K3s server this node should join, if one is up.
 // The address is read from Serf membership.
 // When multiple servers are available: the lowest name wins.
-// todo : better to use a random server instead of the lowest name ? (to avoid overloading IO on the same server ?)
 func (v clusterView) findK3sJoinTarget() (admin.Member, bool) {
-	target := admin.Member{}
-	for _, member := range v.snapshot.Members {
-		if member.Status != memberStatusAlive ||
-			member.Tags["state"] != string(node.StateStableServer) {
-			continue
-		}
-		if target.Name == "" || member.Name < target.Name {
-			target = member
-		}
-	}
-	return target, target.Name != ""
+	return v.lowestNamedAliveMemberIn(node.StateStableServer)
 }
 
 // findExistingK3sClusterMember returns a Serf member that already belongs to a K3s cluster, if there is one.
@@ -86,17 +78,36 @@ func (v clusterView) stableServerCount() int {
 	return count
 }
 
-// needsAnotherK3sServer reports whether the cluster is still missing a K3s server.
-//
-// A failed member keeps its place: replacing a dead server is the rescaling workflow's job.
-func (v clusterView) needsAnotherK3sServer() bool {
-	totalMember := 0
+// population returns the number of machines on the network (alive + failed because they may still come back).
+// This is at the membership level, not the K3s level.
+func (v clusterView) population() int {
+	total := 0
 	for _, member := range v.snapshot.Members {
 		if isMemberAliveOrFailed(member) {
-			totalMember++
+			total++
 		}
 	}
-	return v.k3sServerCount() < node.DesiredServerCount(totalMember)
+	return total
+}
+
+// desiredServerCount returns the number of K3s servers this population needs.
+// Every decision that adds or removes a server reads this same value.
+func (v clusterView) desiredServerCount() int {
+	return node.DesiredServerCount(v.population())
+}
+
+// needsAnotherK3sServer reports whether the cluster is still missing a K3s server.
+//
+// A failed member keeps its place: it may come back with its data, and etcd refuses to
+// grow while one of its members is unreachable anyway.
+func (v clusterView) needsAnotherK3sServer() bool {
+	return v.k3sServerCount() < v.desiredServerCount()
+}
+
+// hasTooManyK3sServers reports whether the cluster runs more K3s servers than its population needs.
+// It's the demotion trigger.
+func (v clusterView) hasTooManyK3sServers() bool {
+	return v.k3sServerCount() > v.desiredServerCount()
 }
 
 // k3sServerCount returns the number of members that are a K3s server or are installing one.
@@ -111,7 +122,7 @@ func (v clusterView) k3sServerCount() int {
 }
 
 // isEtcdMembershipChanging reports whether a member is currently altering the etcd membership.
-// Only alive members count (a machine that died mid-installation doesn't block later join).
+// Only alive members count (a machine that died mid-installation doesn't block).
 func (v clusterView) isEtcdMembershipChanging() bool {
 	for _, member := range v.snapshot.Members {
 		if member.Status == memberStatusAlive && isNodeChangingEtcdMembership(node.State(member.Tags["state"])) {
@@ -121,19 +132,92 @@ func (v clusterView) isEtcdMembershipChanging() bool {
 	return false
 }
 
-// isFirstWaitingJoiner reports whether self holds the turn among the nodes waiting to join.
-// The lowest name win.
-func (v clusterView) isFirstWaitingJoiner(self string) bool {
+// isRescaleCoordinator reports whether self holds the turn to repair the cluster.
+// The coordinator is the lowest-named alive stable_server.
+func (v clusterView) isRescaleCoordinator(self string) bool {
+	elected, found := v.lowestNamedAliveMemberIn(node.StateStableServer)
+	return found && elected.Name == self
+}
+
+// findPromotionTarget returns the agent that must become a server, if there is one to promote.
+// The lowest name wins.
+func (v clusterView) findPromotionTarget() (admin.Member, bool) {
+	return v.lowestNamedAliveMemberIn(node.StateStableAgent)
+}
+
+// findDemotionTarget returns the server that must become an agent, if there is one to demote.
+// The highest name wins, because isRescaleCoordinator take the lowest one.
+func (v clusterView) findDemotionTarget() (admin.Member, bool) {
+	return v.highestNamedAliveMemberIn(node.StateStableServer)
+}
+
+// highestNamedAliveMemberIn returns the highest-named alive member in the given state.
+func (v clusterView) highestNamedAliveMemberIn(state node.State) (admin.Member, bool) {
+	target := admin.Member{}
 	for _, member := range v.snapshot.Members {
-		if member.Status != memberStatusAlive ||
-			member.Tags["state"] != string(node.StateJoiningWaiting) {
+		if member.Status != memberStatusAlive || member.Tags["state"] != string(state) {
 			continue
 		}
-		if member.Name < self {
-			return false
+		if target.Name == "" || member.Name > target.Name {
+			target = member
 		}
 	}
-	return true
+	return target, target.Name != ""
+}
+
+// lowestNamedAliveMemberIn returns the lowest-named alive member in the given state.
+func (v clusterView) lowestNamedAliveMemberIn(state node.State) (admin.Member, bool) {
+	target := admin.Member{}
+	for _, member := range v.snapshot.Members {
+		if member.Status != memberStatusAlive || member.Tags["state"] != string(state) {
+			continue
+		}
+		if target.Name == "" || member.Name < target.Name {
+			target = member
+		}
+	}
+	return target, target.Name != ""
+}
+
+// failedMembersNames returns the names of the members Serf currently reports as failed.
+func (v clusterView) failedMembersNames() []string {
+	names := make([]string, 0, len(v.snapshot.Members))
+	for _, member := range v.snapshot.Members {
+		if member.Status == memberStatusFailed {
+			names = append(names, member.Name)
+		}
+	}
+	return names
+}
+
+// durablyFailedMembersNames returns the members that have been continuously failed for at least grace,
+// and the instant at which the next one becomes evictable (zero when none is pending).
+//
+// Serf exposes no failure timestamp, so the first observation of each failure is kept by the
+// caller in failedSince. A member missing from that map is treated as failing right now.
+func (v clusterView) durablyFailedMembersNames(
+	failedSince map[string]time.Time,
+	grace time.Duration,
+	now time.Time,
+) (evictable []string, nextDeadline time.Time) {
+	for _, name := range v.failedMembersNames() {
+		since, seen := failedSince[name]
+		if !seen {
+			since = now
+		}
+
+		deadline := since.Add(grace)
+		if !deadline.After(now) {
+			evictable = append(evictable, name)
+			continue
+		}
+		if nextDeadline.IsZero() || deadline.Before(nextDeadline) {
+			nextDeadline = deadline
+		}
+	}
+
+	slices.Sort(evictable)
+	return evictable, nextDeadline
 }
 
 // isMemberAliveOrFailed reports whether a member status still belongs to the cluster's population.
@@ -150,7 +234,8 @@ func isNodeAK3sServer(state node.State) bool {
 	case node.StateStableServer,
 		node.StateBootstrapInstallInit,
 		node.StateBootstrapInstallServer,
-		node.StateJoiningServer:
+		node.StateRescaleCoordinating,
+		node.StateRescalePromoting:
 		return true
 	default:
 		return false
@@ -166,8 +251,10 @@ func isNodeChangingEtcdMembership(state node.State) bool {
 	switch state {
 	case node.StateBootstrapInstallInit,
 		node.StateBootstrapInstallServer,
-		node.StateJoiningServer,
-		node.StateRejoinCluster:
+		node.StateRejoinCluster,
+		node.StateRescaleCoordinating,
+		node.StateRescalePromoting,
+		node.StateRescaleDemoting:
 		return true
 	default:
 		return false

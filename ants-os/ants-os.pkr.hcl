@@ -85,7 +85,7 @@ build {
   # 1. Copy binaries from pre-populated assets/ directory
   provisioner "file" {
     source      = "assets/k3s-arm64"
-    destination = "/usr/local/bin/k3s"
+    destination = "/tmp/k3s"
   }
   provisioner "file" {
     sources = [

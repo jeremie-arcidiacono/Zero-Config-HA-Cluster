@@ -5,8 +5,11 @@
 # =============================================================================
 set -euo pipefail
 
+VAULT_DIR=/usr/lib/ants/k3s
+AIRGAP_IMAGES=k3s-airgap-images-arm64.tar.zst
+
 step=1
-total_steps=11
+total_steps=12
 echo_step() {
     echo "=====> [$step/$total_steps] $1"
     step=$((step + 1))
@@ -55,7 +58,6 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
     vim
 
 echo_step "Set binaries permissions"
-chmod 755 /usr/local/bin/k3s
 chmod 755 /usr/local/bin/install-k3s.sh
 # chmod 755 /usr/local/bin/antsd
 
@@ -67,9 +69,21 @@ chmod 600 /etc/ssh/sshd_config.d/00-ants-hardening.conf
 rm -f /etc/ssh/sshd_config.d/rename_user.conf
 rm -f /usr/share/userconf-pi/sshd_banner
 
-echo_step "Move k3s air-gap images"
+echo_step "Store the k3s air-gap assets in the vault"
+# The k3s uninstall script deletes /usr/local/bin/k3s and remove the whole /var/lib/rancher/k3s
+# directory, air-gap image archive included. A node that changes its k3s role (antsd's rescaling
+# workflow) would then have nothing left to install from (no internet access constraints).
+# The vault keeps a pristine copy where k3s never looks.
+# antsd restores from it before every installation.
+mkdir -p "$VAULT_DIR/images"
+mv /tmp/k3s "$VAULT_DIR/k3s"
+chmod 755 "$VAULT_DIR/k3s"
+mv "/tmp/$AIRGAP_IMAGES" "$VAULT_DIR/images/$AIRGAP_IMAGES"
+
+echo_step "Link the k3s air-gap assets to their runtime paths"
 mkdir -p /var/lib/rancher/k3s/agent/images
-mv /tmp/k3s-airgap-images-arm64.tar.zst /var/lib/rancher/k3s/agent/images/
+ln "$VAULT_DIR/k3s" /usr/local/bin/k3s
+ln "$VAULT_DIR/images/$AIRGAP_IMAGES" "/var/lib/rancher/k3s/agent/images/$AIRGAP_IMAGES"
 
 echo_step "Configure cgroups for k3s (required on Raspberry Pi)"
 cmdline="/boot/firmware/cmdline.txt"
