@@ -23,7 +23,7 @@
 La tolérance aux pannes est aussi une contrainte forte. 
 En raison des contraintes strictes liées au consensus de la base de données interne de K3s, le cluster doit garder un nombre impair de servers, entre trois et sept au maximum, afin de garder un quorum stable@etcd_etcd_nodate @k3s_high_2026. 
 Si une machine tombe ou si une nouvelle machine arrive, antsd doit donc pouvoir ajuster le rôle des nœuds sans casser cet équilibre.
-Un mécanisme de redimensionnement dynamique est prévu afin de promouvoir ou rétrograder des nœuds automatiquement.
+Un mécanisme de redimensionnement dynamique promeut et rétrograde les nœuds automatiquement, afin que le nombre de serveurs suive la population du cluster sans jamais devenir pair.
 
 == Architecture générale <title-conception-architecture>
 
@@ -75,7 +75,7 @@ En pratique, ants-os ne fait pas la logique du cluster. Il prépare simplement u
 
   Le choix d'embarquer Serf sous forme de librairie plutôt que comme processus séparé suit la même logique. antsd conserve ainsi la maîtrise du cycle de vie du daemon, des événements et de la communication entre nœuds, sans ajouter une couche d'intégration supplémentaire entre deux programmes distincts.
 
-  === Controle et Monitoring
+  === Contrôle et supervision
 
   L'utilisateur final a besoin de pouvoir facilement contrôler et surveiller l'état du cluster. Encore une fois, pour suivre la contrainte de simplicité, ces fonctionnalités doivent être intégrées dans la partie "application web finale" de notre architecture. Bien que la réalisation de cette interface web sorte de notre périmètre, il faut néanmoins que nous fournissions les informations nécessaires à son bon fonctionnement. C'est antsd qui est responsable de fournir ces informations, ainsi que de recevoir les commandes de contrôle et de les exécuter sur le système et sur la ou les machines concernées.
 
@@ -83,7 +83,7 @@ En pratique, ants-os ne fait pas la logique du cluster. Il prépare simplement u
 
   Cette interface reste volontairement minimale. Les besoins identifiés se limitent à quelques points d'accès utiles : un endpoint de statut pour exposer l'état du nœud et du cluster, des points de profilage pour le diagnostic, et une commande de décommissionnement explicite pour retirer proprement un nœud. Ce choix évite de concevoir une API complète alors qu'aucun autre service interne n'a vocation à la consommer.
 
-  En pratique, ces points d'accès servent de socle à l'onglet de réglages de l'application web finale. L'utilisateur n'interagit donc pas directement avec antsd pour des opérations complexes : il déclenche une action simple, et antsd traduit ensuite cette demande en opérations sur K3s en s'appuyant de Serf. Pour accéder à cette interface, l'utilisateur saisit simplement l'adresse IP affichée sur un petit écran présent sur les machines ANTS. Cet affichage local évite de devoir chercher l'adresse du cluster par un autre moyen.
+  En pratique, ces points d'accès servent de socle à l'onglet de réglages de l'application web finale. L'utilisateur n'interagit donc pas directement avec antsd pour des opérations complexes : il déclenche une action simple, et antsd traduit ensuite cette demande en opérations sur K3s en s'appuyant sur Serf. Pour accéder à cette interface, l'utilisateur saisit simplement l'adresse IP affichée sur un petit écran présent sur les machines ANTS. Cet affichage local évite de devoir chercher l'adresse du cluster par un autre moyen.
 
 === Bootstrapping <title-conception-bootstrap>
 
@@ -117,6 +117,8 @@ Une fois cette phase terminée, antsd enregistre l'état local nécessaire pour 
 
 Le comportement de antsd tout au long du cycle de vie de la machine est représenté sous la forme d'une machine d'états. La #ref(<fig_conception_antsd-state-machine>) détaille les différents états possibles et les transitions.
 
+#highlight("TODO : trouver comment afficher ce diagramme sans que ca soit illisible")
+
 #hepia.sourced_figure(
   caption: [Diagramme de cycle de vie d'une machine],
   label: <fig_conception_antsd-state-machine>,
@@ -125,6 +127,7 @@ Le comportement de antsd tout au long du cycle de vie de la machine est représe
 
 Le premier choix distingue un démarrage initial d'un redémarrage connu. Lors d'un premier démarrage, antsd doit déterminer si la machine crée un nouveau cluster ou rejoint un cluster déjà en place. Cette logique, dite de bootstrap, est détaillée dans la section #ref(<title-conception-bootstrap>).
 Lors d'un redémarrage, la présence d'un état local persisté permet au daemon de retrouver rapidement sa place dans le système sans repartir de zéro.
+Si cet état est illisible, ou incohérent avec l'installation K3s trouvée sur la machine, antsd s'arrête dans un état d'échec plutôt que de retomber sur un premier démarrage : celui-ci réinstallerait K3s par-dessus des données existantes.
 
 Ensuite, on distingue deux familles d'états : les états stables et les états de transition. Les états stables correspondent aux machines déjà intégrées au cluster K3s et pleinement fonctionnelles. Les états de transition couvrent les opérations de bootstrap, le rescaling, le décommissionnement et la reprise après redémarrage.
 
@@ -135,5 +138,5 @@ Le rescaling ne se déclenche pas à la moindre variation. Si une panne est cour
 Les événements Serf servent enfin à propager ces changements au reste du cluster.
 La machine d'états s'appuie sur les événements Serf comme mécanisme de propagation.
 Chaque changement d'état est diffusé vers le reste du cluster, ce qui permet aux autres
-nœuds d'adapter leur propre comportement sans recourire à des requêtes explicites entre eux. 
+nœuds d'adapter leur propre comportement sans recourir à des requêtes explicites entre eux.
 antsd conserve ainsi une vision cohérente.
