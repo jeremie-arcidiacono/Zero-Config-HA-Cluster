@@ -64,6 +64,9 @@ type ExecInstaller struct {
 	// token is the pre-shared cluster join token (identical on every node).
 	token string
 
+	// nodeName is the name this node takes in the K3s cluster (same one used in Serf)
+	nodeName string
+
 	// unitDir is the systemd unit directory.
 	unitDir string
 
@@ -74,10 +77,11 @@ type ExecInstaller struct {
 }
 
 // NewExecInstaller returns an Installer that runs the install script.
-func NewExecInstaller(token string, logger *slog.Logger) *ExecInstaller {
+func NewExecInstaller(token, nodeName string, logger *slog.Logger) *ExecInstaller {
 	return &ExecInstaller{
 		logger:    logger,
 		token:     token,
+		nodeName:  nodeName,
 		unitDir:   systemdUnitDir,
 		binPath:   binPath,
 		imagesDir: imagesPath,
@@ -264,6 +268,7 @@ func (i *ExecInstaller) runInstallScript(ctx context.Context, extraEnv []string)
 	cmd.Env = append(os.Environ(),
 		"INSTALL_K3S_SKIP_DOWNLOAD=true",
 		"K3S_TOKEN="+i.token,
+		"K3S_NODE_NAME="+i.nodeName,
 	)
 	cmd.Env = append(cmd.Env, extraEnv...)
 
@@ -295,19 +300,12 @@ func (i *ExecInstaller) WaitServerReady(ctx context.Context) error {
 //
 // An agent hosts no API server, so readiness has to be asked of the control plane.
 func (i *ExecInstaller) WaitAgentReady(ctx context.Context) error {
-	// todo : use same name in config, serf and k3s
-	hostname, err := os.Hostname()
-	if err != nil {
-		return fmt.Errorf("resolve hostname used as the k3s node name: %w", err)
-	}
-	nodeName := strings.ToLower(strings.TrimSpace(hostname)) // DNS RFC-1123 name rule
-
 	const readyConditionPath = `jsonpath={.status.conditions[?(@.type=="Ready")].status}`
 
 	return i.pollUntilReady(ctx, "agent", func(ctx context.Context) error {
 		probe := exec.CommandContext(ctx, i.binPath, "kubectl",
 			"--kubeconfig", agentKubeconfigPath,
-			"get", "node", nodeName, // Limit the scope to this node only, because an agent is not authorized to get all nodes
+			"get", "node", i.nodeName, // Limit the scope to this node only, because an agent is not authorized to get all nodes
 			"-o", readyConditionPath)
 
 		output, err := probe.CombinedOutput()
@@ -315,7 +313,7 @@ func (i *ExecInstaller) WaitAgentReady(ctx context.Context) error {
 			return fmt.Errorf("%w (output: %s)", err, tail(output))
 		}
 		if condition := strings.TrimSpace(string(output)); condition != "True" {
-			return fmt.Errorf("node %q is not Ready yet (condition: %q)", nodeName, condition)
+			return fmt.Errorf("node %q is not Ready yet (condition: %q)", i.nodeName, condition)
 		}
 		return nil
 	})

@@ -27,10 +27,11 @@ func (m *Manager) startRejoin() {
 		"boot_count", persisted.BootCount,
 		"first_boot_completed_at", persisted.FirstBootCompletedAt)
 
+	// GUARD: a rename between two boots leaves the previous name behind in the K3s cluster
 	if persisted.NodeName != m.config.NodeName {
-		// todo : this should be fatal after we unify the nodeName between config, serf and k3s. nodeName should not change
-		m.logger.Warn("persisted node name differs from the configured one",
-			"persisted", persisted.NodeName, "configured", m.config.NodeName)
+		m.failRejoin(fmt.Errorf("this node is named %q but its persisted state was written by %q: "+
+			"a renamed node must be factory reset", m.config.NodeName, persisted.NodeName))
+		return
 	}
 
 	m.transition(node.StateRejoinCluster)

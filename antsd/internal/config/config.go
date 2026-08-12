@@ -17,7 +17,7 @@ import (
 // Config holds all runtime parameters for antsd.
 type Config struct {
 	// NodeName is the cluster-wide unique node identifier, also used for role election (lowest name).
-	// Defaults to the machine hostname. TODO : use better naming (derived from MAC address ?)
+	// Defaults to a name derived from the MAC address.
 	NodeName string
 
 	// Serf
@@ -80,9 +80,9 @@ const (
 func Load() (*Config, error) {
 	c := &Config{}
 
-	hostname, _ := os.Hostname()
+	derivedName, derivedNameErr := defaultNodeName()
 
-	flag.StringVar(&c.NodeName, "node-name", envOr("ANTSD_NODE_NAME", hostname), "Unique node name (defaults to hostname)")
+	flag.StringVar(&c.NodeName, "node-name", envOr("ANTSD_NODE_NAME", derivedName), "Unique node name (defaults to a name derived from the MAC address)")
 	flag.StringVar(&c.SerfBindAddr, "serf-bind-addr", envOr("ANTSD_SERF_BIND_ADDR", defaultSerfBindAddr), "Serf bind address")
 	flag.IntVar(&c.SerfBindPort, "serf-bind-port", envOrInt("ANTSD_SERF_BIND_PORT", defaultSerfBindPort), "Serf bind port")
 	flag.IntVar(&c.HTTPPort, "http-port", envOrInt("ANTSD_HTTP_PORT", defaultHTTPPort), "HTTP administration (monitoring and control) port")
@@ -97,6 +97,9 @@ func Load() (*Config, error) {
 
 	flag.Parse()
 
+	if c.NodeName == "" && derivedNameErr != nil {
+		return nil, fmt.Errorf("cannot derive a node name from this machine, pass -node-name: %w", derivedNameErr)
+	}
 	if err := c.validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
@@ -105,8 +108,8 @@ func Load() (*Config, error) {
 
 // validate checks that the configuration is valid.
 func (c *Config) validate() error {
-	if c.NodeName == "" {
-		return fmt.Errorf("node-name must not be empty")
+	if err := validateNodeName(c.NodeName); err != nil {
+		return err
 	}
 	if net.ParseIP(c.SerfBindAddr) == nil {
 		return fmt.Errorf("invalid serf-bind-addr: %s", c.SerfBindAddr)

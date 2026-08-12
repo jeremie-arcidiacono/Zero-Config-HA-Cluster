@@ -106,7 +106,7 @@ func New(conf *config.Config, logger *slog.Logger, startedAt time.Time) *Manager
 		installer = fake
 		controlPlane = k3s.NewFakeControlPlane(logger)
 	} else {
-		installer = k3s.NewExecInstaller(conf.K3sToken, logger)
+		installer = k3s.NewExecInstaller(conf.K3sToken, conf.NodeName, logger)
 		controlPlane = k3s.NewExecControlPlane(logger)
 	}
 
