@@ -7,9 +7,9 @@
 Ce premier chapitre présente le contexte dans lequel s'inscrit ce projet, et pose toutes les bases nécessaires à la compréhension de la problématique et de la solution proposée.
 Il revient sur de nombreuses notions déjà présentées dans le mémoire du projet de semestre@arcidiacono_systeme_2026, qui sont essentielles pour comprendre ce Travail de Bachelor qui en est la continuité.
 
-Il est divisé en plusieurs parties : tout d'abord, une présentation des outils Kubernetes et Serf, qui font partie intégrante de la solution proposée. 
-Ensuite, nous reviendrons rapidement sur différents choix effectués lors du projet de semestre@arcidiacono_systeme_2026.
-Enfin, nous présenterons les différents besoins et contraintes identifiés.
+Il est divisé en trois parties. Nous présentons d'abord Kubernetes et sa distribution K3s, puis Serf, les deux outils sur lesquels repose la solution.
+Ces deux présentations reviennent au passage sur les choix effectués lors du projet de semestre@arcidiacono_systeme_2026 et sur ce qui les a motivés.
+Nous exposons enfin les besoins et les contraintes du projet, ainsi que la manière dont certains d'entre eux ont évolué en cours de route.
 
 == Présentation de Kubernetes <title-context-kubernetes>
 
@@ -109,4 +109,79 @@ Enfin, Serf peut conserver l'état du cluster sous forme de snapshots. Cela perm
 
 == Présentation des besoins et contraintes <title-context-needs>
 
-#highlight("TODO")
+Les besoins de ce projet ont trois origines. Ils viennent du produit que ANTS A.I. Systems commercialise, de l'énoncé du travail de Bachelor, et du projet de semestre qui l'a précédé@arcidiacono_systeme_2026, où une première liste de contraintes avait été posée pour cadrer la recherche de solutions existantes.
+
+Les contraintes du projet de semestre ont été écrites avant toute expérimentation sur du matériel réel, et deux d'entre elles ont évolué. Nous les présentons ici telles qu'elles étaient, puis nous expliquons ce qui les a fait évoluer. 
+// Cette section décrit donc le problème à résoudre, et non la solution : la manière dont l'architecture y répond fait l'objet du #ref(<chapter-conception>).
+
+=== Besoins
+
+Le point de départ est un lot de machines identiques, sorties de leur emballage, que le client branche à l'alimentation et au réseau local. À partir de cet instant, tout doit se faire sans lui.
+
+Les machines doivent d'abord se trouver mutuellement sur le réseau, sans que personne n'ait à saisir la moindre adresse. Elles doivent ensuite installer K3s, puis s'accorder sur la configuration du cluster à former et sur le rôle de chacune. Une machine ajoutée plus tard, alors que le cluster est déjà en service, doit rejoindre celui-ci d'elle-même, sans que le cluster existant ait à être arrêté ou reconfiguré.
+
+Le système doit enfin survivre aux pannes. La perte d'une machine ne doit pas interrompre le service, et le cluster doit se réorganiser pour retrouver un état sain, ce qui suppose aussi bien d'écarter la machine défectueuse que de redistribuer les responsabilités qu'elle portait. De cette manière le système est capable de tenir dans la durée.
+
+L'ensemble doit rester clé en main. Le client type de ANTS A.I. Systems est une petite entreprise ou un indépendant, qui ne possède pas d'équipe technique ni les ressources nécessaires pour gérer une infrastructure complexe. Les machines sont donc vendues comme un produit autonome.
+
+Le client a malgré tout besoin d'une fenêtre sur son cluster, pour en consulter l'état et déclencher les rares actions qui lui reviennent. Cette fenêtre prend la forme d'une interface web, dont la réalisation sort du périmètre de ce travail.
+Cependant, les informations et les commandes qu'elle expose doivent être fournies par le système.
+De plus, les machines vendues par ANTS A.I. possèderont probablement, en plus de l'interface web, un écran et quelques boutons physiques (ou un écran tactile), qui permettront là aussi d'afficher l'état du cluster et de déclencher quelque actions.
+Pour les besoins de démonstration et de validation, une interface web minimale a été développée.
+Cette interface est une fusion de l'interface web et de l'écran physique.
+
+
+La #ref(<fig_context_use-case>) résume ces attentes. Elle sépare ce que le client fait, à savoir brancher les machines, consulter le cluster et exploiter ses applications, de ce que le système prend en charge seul, à savoir former le cluster et le rétablir après une panne.
+
+#hepia.sourced_figure(
+  caption: [Diagramme de cas d'utilisation],
+  label: <fig_context_use-case>,
+  image("../assets/diagrams/context_use-case.svg"),
+)
+
+=== Contraintes
+
+Toutes les machines sont identiques au départ, autant par leur matériel que par leur système d'exploitation et leur configuration. Aucune ne porte de rôle particulier avant d'être branchée, et aucune ne peut donc être désignée à l'avance comme la machine principale. 
+Cette homogénéité est une propriété du produit, puisque le client reçoit un lot de machines interchangeables. Elle a une conséquence directe sur la conception, car la répartition des rôles doit alors être décidée par le système lui-même, au démarrage.
+
+L'intervention humaine doit rester minimale. 
+L'énoncé du travail emploie précisément ce mot, là où le projet de semestre parlait d'absence totale d'intervention. 
+Le système s'autorise donc à solliciter l'utilisateur, mais seulement à des moments clés et pour des gestes courts, du type lire ce qu'affiche l'écran de la machine et appuyer sur un ou deux boutons. 
+C'est le cas à la création du tout premier cluster, qui demande une confirmation dont les raisons sont exposées au #ref(<chapter-conception>). Ce peut aussi être le cas lorsqu'une machine se retrouve dans une situation dont elle ne sait pas se sortir seule, ce qui doit rester exceptionnel. 
+En dehors de ces moments, le système fonctionne sans intervention externe.
+
+L'important est qu'aucune de ces sollicitations ne soit de nature technique. 
+Le client n'a ni configuration à écrire, ni commande à saisir, ni topologie à connaître.
+
+La solution doit être sous licence libre. 
+ANTS A.I. Systems ne souhaite pas fonder son produit sur des logiciels propriétaires, ce qui écarte non seulement les solutions payantes, mais aussi celles dont la licence contraindrait la commercialisation.
+
+=== Contraintes révisées en cours de projet
+
+Le projet de semestre imposait que le système ne devait s'appuyer sur aucune infrastructure présente sur le réseau, et citait explicitement le serveur #acr("DHCP") comme dépendance à éviter. 
+Le raisonnement s'appuyait sur l'auto-attribution d'adresses que permet IPv6, laquelle supprime effectivement ce besoin, et sur l'idée qu'un service extérieur constitue un problème d'autonomie.
+
+Cette position a été réevaluée durant le projet (en juin 2026). 
+Un réseau d'entreprise, même modeste, dispose presque toujours d'un serveur #acr("DHCP"), et un client qui n'en possède pas exploite un réseau suffisamment particulier pour ne pas correspondre à la cible du produit. Se priver d'une option universellement disponible pour couvrir un cas de figure rare complique la solution sans rien apporter au client type. 
+Nous considérons donc désormais qu'un serveur #acr("DHCP") est présent. La contrainte de fond n'est pas abandonnée pour autant, puisque le système continue de fonctionner sans aucun serveur ou infrastructure qui lui soit propre : seul la configuration réseau est déléguée à l'existant.
+
+La seconde contrainte revue concerne l'accès à Internet, et il faut ici distinguer deux exigences.
+
+La première porte sur le système d'exploitation, qui doit contenir tout le nécessaire pour installer et démarrer anstd et K3s sans rien télécharger. Cette exigence figure dans l'énoncé du travail et elle est satisfaite. 
+Elle protège le client contre une installation qui échouerait à cause d'un réseau lent, temporairement indisponible, mal configuré ou d'un registre d'images indisponible, situations bien plus fréquentes qu'une absence complète de connectivité.
+
+La seconde portait sur le réseau lui-même, que le projet de semestre supposait totalement coupé d'Internet. 
+Grâce à des tests en conditions réels sur des machines physiques (le banc d'essai), nous avons constaté que cette hypothèse compliquait inutilement la solution.
+
+Le banc d'essai ayant été volontairement placé sur un réseau isolé afin de ressembler le plus possible aux conditions de départ, nous avons constaté que les machines n'avaient plus la bonne date et heure. 
+Leur date était fausse de plusieurs mois, et surtout elle différait d'une machine à l'autre. 
+L'explication est simple : les Raspberry Pi utilisés ne conservent pas l'heure lorsqu'ils sont hors tension, faute d'horloge sauvegardée par pile, et le service de synchronisation (#acr("NTP")) n'a aucun serveur de temps à interroger sur un réseau isolé. 
+Le problème est plus marqué sur des Raspberry Pi que sur les machines commercialisées par ANTS A.I. Systems, mais il peut tout de même survenir, en particulier sur de longues périodes.
+
+Une heure fausse peut causer de nombreux problèmes, et fournir un mécanisme de synchronisation du temps est trop complexe et n'apporte pas de valeur au client. 
+
+Nous avons donc accepté, en juillet 2026, de lever cette contrainte. 
+Le cluster peut disposer d'un accès à Internet, ce qui est de toute façon le cas d'un réseau d'entreprise ordinaire, et il en tire la synchronisation de l'heure. 
+Cet accès n'est pas une dépendance forte : rien dans la formation du cluster ni dans sa réparation ne nécéssite Internet, et une coupure de la liaison extérieure ne modifie en rien le comportement du système.
+
+L'ensemble des besoins et des contraintes étant posé, nous pouvons maintenant présenter l'architecture conçue pour y répondre.

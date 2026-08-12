@@ -7,24 +7,6 @@
   Le chapitre précédent a permis de définir le contexte général du projet, de revenir sur différents points abordés durant le projet de semestre@arcidiacono_systeme_2026 et de justifier le choix des technologies fondamentales telles que Kubernetes et Serf. 
   Ce deuxième chapitre détaille la conception du système et l'architecture globale retenue pour répondre au cahier des charges. L'objectif est de présenter les mécanismes décisionnels et l'organisation structurelle de la solution avant d'aborder, dans le chapitre suivant, son implémentation technique détaillée.
 
-// TODO : supprimer car redondant avec le chapitre précédent ??
-  La conception est basée autour d'un principe simple: l'utilisateur final ne doit pas avoir à connaître la topologie du cluster ni à intervenir sur les nœuds après leur mise sous tension. Le rôle du système consiste donc à automatiser la découverte, le bootstrap, la supervision et l'adaptation du cluster, tout en laissant à l'application finale une interface de contrôle minimale et lisible.
-
-== Exigences et fonctionnalités <title-conception-requirements>
-
-  Le besoin principal de cette solution réside dans la création d'un environnement à zéro-configuration. Concrètement, le client final doit uniquement brancher physiquement les machines au réseau local et à l'alimentation électrique. Dès cet instant, le système prend le relais de manière totalement autonome pour découvrir les autres membres présents sur le réseau et former un cluster de serveurs fonctionnels. La figure #ref(<fig_conception_use-case>) résume ce scénario, mettant en évidence l'absence d'intervention technique requise avant l'utilisation finale de l'application.
-
-#hepia.sourced_figure(
-  caption: [Diagramme de cas d'utilisation],
-  label: <fig_conception_use-case>,
-  image("../assets/diagrams/conception_use-case.svg"),
-)
-
-La tolérance aux pannes est aussi une contrainte forte. 
-En raison des contraintes strictes liées au consensus de la base de données interne de K3s, le cluster doit garder un nombre impair de servers, entre trois et sept au maximum, afin de garder un quorum stable@etcd_etcd_nodate @k3s_high_2026. 
-Si une machine tombe ou si une nouvelle machine arrive, antsd doit donc pouvoir ajuster le rôle des nœuds sans casser cet équilibre.
-Un mécanisme de redimensionnement dynamique promeut et rétrograde les nœuds automatiquement, afin que le nombre de serveurs suive la population du cluster sans jamais devenir pair.
-
 == Architecture générale <title-conception-architecture>
 
   Afin de répondre aux différents besoins et contraintes énumérés précédemment, nous avons conçu une architecture cible pour notre solution. Pour commencer, partons d'une vue d'ensemble de ce système final. Dans la #ref(<fig_conception_layers>), nous avons représenté l'une de nos machines en quatre niveaux.
@@ -45,7 +27,11 @@ Un mécanisme de redimensionnement dynamique promeut et rétrograde les nœuds a
 
 == ants-os <title-conception-ants-os>
 
-La base du système est une image ARM64 prête à l'emploi. Pour le PoC, elle cible des Raspberry Pi 5, ce qui permet de tester la solution sur une plateforme simple et peu coûteuse, tout en restant proche des machines réelles de ANTS A.I. Systems. L'image contient K3s, antsd, les images de conteneurs nécessaires pour un fonctionnement hors ligne, et un service systemd pour lancer antsd au démarrage.
+La base du système est une image ARM64 prête à l'emploi. 
+Pour le PoC, elle cible des Raspberry Pi 5, ce qui permet de tester la solution sur une plateforme simple et peu coûteuse, tout en restant proche des machines réelles de ANTS A.I. Systems. 
+L'image contient K3s, antsd, les images de conteneurs nécessaires pour un fonctionnement hors ligne, et un service systemd pour lancer antsd au démarrage. 
+// Pendant le développement, antsd est en revanche déposé sur les machines par un autre moyen, car c'est la partie du système qui change le plus souvent.
+// Ce point sera détaillé dans le #ref(<chapter-tests>) dédié aux tests.
 
 Cette image est construite à l'avance avec HashiCorp Packer@hashicorp_hashicorppacker_2026. Ce choix évite une installation manuelle sur chaque machine, réduit les différences logicielles entre nœuds et enlève la dépendance au réseau lors du premier démarrage. 
 L'image contient le binaire K3s complet, les images de conteneurs requises pour fonctionner hors ligne, le binaire antsd avec sa
@@ -79,9 +65,9 @@ En pratique, ants-os ne fait pas la logique du cluster. Il prépare simplement u
 
   L'utilisateur final a besoin de pouvoir facilement contrôler et surveiller l'état du cluster. Encore une fois, pour suivre la contrainte de simplicité, ces fonctionnalités doivent être intégrées dans la partie "application web finale" de notre architecture. Bien que la réalisation de cette interface web sorte de notre périmètre, il faut néanmoins que nous fournissions les informations nécessaires à son bon fonctionnement. C'est antsd qui est responsable de fournir ces informations, ainsi que de recevoir les commandes de contrôle et de les exécuter sur le système et sur la ou les machines concernées.
 
-  Pour l'instant, nous décidons que cela se fera via de simples requêtes HTTP. Certaines permettent de récupérer des informations sur l'état et la santé du cluster, tandis que d'autres permettent d'envoyer des commandes de contrôle, telles que le décommissionnement d'une machine du cluster.
+  Pour l'instant, nous décidons que cela se fera via de simples requêtes HTTP. Certaines permettent de récupérer des informations sur l'état et la santé du cluster, tandis que d'autres permettent d'envoyer des commandes de contrôle.
 
-  Cette interface reste volontairement minimale. Les besoins identifiés se limitent à quelques points d'accès utiles : un endpoint de statut pour exposer l'état du nœud et du cluster, des points de profilage pour le diagnostic, et une commande de décommissionnement explicite pour retirer proprement un nœud. Ce choix évite de concevoir une API complète alors qu'aucun autre service interne n'a vocation à la consommer.
+  Cette interface reste volontairement minimale. Les besoins identifiés se limitent à quelques points d'accès utiles : un point de statut qui expose l'état du nœud et du cluster, les commandes de création d'un cluster décrites plus bas, et une commande de décommissionnement explicite pour retirer proprement un nœud. Ce choix évite de concevoir une API complète alors qu'aucun autre service interne n'a vocation à la consommer. Le décommissionnement n'est pas encore réalisé à ce stade du projet, contrairement aux deux autres.
 
   En pratique, ces points d'accès servent de socle à l'onglet de réglages de l'application web finale. L'utilisateur n'interagit donc pas directement avec antsd pour des opérations complexes : il déclenche une action simple, et antsd traduit ensuite cette demande en opérations sur K3s en s'appuyant sur Serf. Pour accéder à cette interface, l'utilisateur saisit simplement l'adresse IP affichée sur un petit écran présent sur les machines ANTS. Cet affichage local évite de devoir chercher l'adresse du cluster par un autre moyen.
 
@@ -89,7 +75,7 @@ En pratique, ants-os ne fait pas la logique du cluster. Il prépare simplement u
 
 Le bootstrapping est la phase qui donne sa forme initiale au cluster. C'est à ce moment que antsd décide si la machine initialise un nouveau cluster ou si elle rejoint un cluster déjà présent sur le réseau local.
 
-Lorsqu'une machine démarre pour la première fois, antsd lance Serf, attend que les autres nœuds deviennent visibles et observe si un cluster existe déjà. Si c'est le cas, la machine rejoint ce cluster et installe K3s avec le rôle attendu. Sinon, elle passe en mode bootstrap et participe à la création du premier cluster K3s.
+Lorsqu'une machine démarre pour la première fois, antsd lance Serf, attend que les autres nœuds deviennent visibles et observe si un cluster existe déjà. Si c'est le cas, la machine rejoint ce cluster et s'y installe en agent, sans jamais toucher aux machines déjà en place : décider de la taille du plan de contrôle revient aux machines qui voient le cluster en entier, et non à celle qui arrive. Sinon, la machine se tient prête à participer à la création d'un premier cluster.
 
 La #ref(<fig_conception_bootstrap-discovery>) illustre cette première phase de décision. Elle montre comment la machine démarre, observe le réseau local, puis choisit entre rejoindre un cluster déjà formé ou participer au bootstrap initial.
 
@@ -99,11 +85,26 @@ La #ref(<fig_conception_bootstrap-discovery>) illustre cette première phase de 
   image("../assets/diagrams/conception_bootstrap-discovery.svg"),
 )
 
-Pour éviter que plusieurs machines créent chacune leur propre cluster, les nœuds passent d'abord par un état d'attente commun. Chacun annonce sa présence, puis un timer local laisse le temps aux autres machines de démarrer. La première machine dont le timer expire devient le nœud initial, noté N0. Elle installe le premier K3s Server puis diffuse l'information aux autres nœuds.
+La création d'un cluster est le seul moment où le système demande quelque chose à l'utilisateur.
+Une machine qui ne trouve aucun cluster ne prend pas l'initiative d'en fabriquer un toute seule, car elle n'a aucun moyen de distinguer un réseau réellement vide d'un réseau dont les autres machines n'ont pas encore fini de démarrer.
+Elle attend donc une demande explicite, suivie d'une confirmation, que l'utilisateur donne depuis l'écran de la machine.
+Ce geste unique ajoute une sécurité conséquente : sans lui, brancher une machine à côté d'une installation existante mais momentanément arrêtée créerait un second cluster.
 
-Les autres machines se répartissent ensuite selon leur position dans le groupe découvert. Les nœuds N1 et N2 rejoignent le cluster en tant que K3s Servers afin d'atteindre le quorum minimal du cluster haute disponibilité. Les nœuds suivants rejoignent ensuite le cluster dans le rôle qui convient le mieux à l'état du système.
+Une fois la confirmation reçue, toutes les machines en premier démarrage passent par un état d'attente commun. Chacune arme un minuteur local, ce qui laisse le temps à la liste des membres de se stabiliser avant que quoi que ce soit ne soit décidé. La première machine dont le minuteur expire diffuse simplement le signal de départ au groupe.
 
-La #ref(<fig_conception_bootstrap-sequence>) détaille cette deuxième partie du bootstrap. On y voit le passage en mode d'attente, puis la désignation du premier nœud à installer K3s en mode initialisation, avant que les autres machines rejoignent le cluster en parallèle.
+À la réception de ce signal, chaque machine trie la liste des membres visibles par nom et en déduit sa propre position, donc son rôle. La machine qui arrive en tête, notée N0, initialise le cluster et installe le premier K3s Server. Comme toutes les machines partent de la même liste et appliquent le même calcul, elles aboutissent au même résultat sans avoir à négocier.
+
+Le nombre de servers à former découle d'une contrainte de la base de données interne de K3s.
+Celle-ci fonctionne par consensus, ce qui suppose qu'une majorité de servers reste joignable pour que le cluster soit pilotable @k3s_high_2026.
+Ce nombre doit donc rester impair, et ne pas dépasser sept @etcd_etcd_nodate.
+Trois servers constituent le plancher de la haute disponibilité, c'est à dire le plus petit nombre qui permette au cluster de survivre à la perte d'une machine.
+Un cluster peut compter moins de machines que cela, et le système doit alors fonctionner quand même, avec un seul server et sans haute disponibilité.
+Les machines dont la position tombe dans ce quota deviennent servers, les autres deviennent agents.
+
+Les machines suivantes rejoignent alors le cluster selon leur position.
+Celles qui doivent devenir des servers le font une par une, dans l'ordre, car la base de données interne de K3s n'accepte qu'un ajout de membre à la fois. Celles qui deviennent des agents attendent que les servers attendus soient en place, puis rejoignent le cluster toutes ensemble.
+
+La #ref(<fig_conception_bootstrap-sequence>) détaille cette deuxième partie du bootstrap. On y voit le passage en mode d'attente, puis l'installation du premier nœud en mode initialisation, l'arrivée en série des autres servers et enfin celle des agents.
 
 #hepia.sourced_figure(
   caption: [Séquence du mécanisme de bootstrapping],
@@ -129,11 +130,13 @@ Le premier choix distingue un démarrage initial d'un redémarrage connu. Lors d
 Lors d'un redémarrage, la présence d'un état local persisté permet au daemon de retrouver rapidement sa place dans le système sans repartir de zéro.
 Si cet état est illisible, ou incohérent avec l'installation K3s trouvée sur la machine, antsd s'arrête dans un état d'échec plutôt que de retomber sur un premier démarrage : celui-ci réinstallerait K3s par-dessus des données existantes.
 
-Ensuite, on distingue deux familles d'états : les états stables et les états de transition. Les états stables correspondent aux machines déjà intégrées au cluster K3s et pleinement fonctionnelles. Les états de transition couvrent les opérations de bootstrap, le rescaling, le décommissionnement et la reprise après redémarrage.
+Ensuite, on distingue deux familles d'états : les états stables et les états de transition. Les états stables correspondent aux machines déjà intégrées au cluster K3s et pleinement fonctionnelles. Les états de transition couvrent la création d'un cluster, l'arrivée d'une machine dans un cluster déjà en service, la reprise après redémarrage, le rescaling et le décommissionnement.
 
-Cette séparation évite de mélanger des cas qui ne demandent pas les mêmes actions. Une machine en bootstrap ne doit pas être traitée comme une machine déjà prête, et un nœud en cours de retrait ne doit plus recevoir de nouvelles décisions d'orchestration. 
+Cette séparation évite de mélanger des cas qui ne demandent pas les mêmes actions. Une machine en bootstrap ne doit pas être traitée comme une machine déjà prête, et un nœud en cours de retrait ne doit plus recevoir de nouvelles décisions d'orchestration.
 
-Le rescaling ne se déclenche pas à la moindre variation. Si une panne est courte, K3s peut gérer seul la remise en route normale du nœud. antsd intervient surtout quand la panne dure ou quand l'équilibre du cluster n'est plus bon. Dans ce cas, il peut promouvoir ou rétrograder un nœud depuis l'extérieur du cluster, au lieu de laisser K3s changer le rôle des machines trop tôt. Cette séparation garde le cluster plus stable pendant les redémarrages simples.
+Le rescaling existe parce que la règle sur le nombre de servers vaut pour toute la vie du cluster, et pas seulement à sa création. Chaque machine qui arrive ou qui disparaît change la population, donc le nombre de servers souhaitable. antsd doit pouvoir promouvoir et rétrograder des nœuds pour suivre cette valeur, sans jamais la laisser devenir paire.
+
+Ce mécanisme ne se déclenche cependant pas à la moindre variation. Si une panne est courte, K3s peut gérer seul la remise en route normale du nœud. antsd intervient surtout quand la panne dure ou quand l'équilibre du cluster n'est plus bon. Il commence alors par retirer du cluster les machines durablement perdues, car une machine morte reste comptée dans la majorité requise et rapproche donc le cluster de la perte de son quorum. Il peut ensuite promouvoir ou rétrograder un nœud depuis l'extérieur du cluster, au lieu de laisser K3s changer le rôle des machines trop tôt. Cette séparation garde le cluster plus stable pendant les redémarrages simples.
 
 Les événements Serf servent enfin à propager ces changements au reste du cluster.
 La machine d'états s'appuie sur les événements Serf comme mécanisme de propagation.
