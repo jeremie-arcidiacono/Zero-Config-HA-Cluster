@@ -31,6 +31,7 @@
     alt: "Ensemble de serveurs interconnectés représentant un système distribué",
     height: 25%
     ),
+  topic: include "contents/topic_content.typ",
   internship: false,
   confidential: false,
   orientation: "logiciel", //Compléter avec "sécurité" ou "logiciel" ou "embarqué"

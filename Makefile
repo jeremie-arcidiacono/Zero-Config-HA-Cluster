@@ -5,8 +5,12 @@ MERMAID_DOCKER_IMAGE = tb/mermaid:local
 MERMAID_DOCKER_IMAGE_DIR = docs/docker/mermaid
 
 REPORT_DIR = docs/report
+
 REPORT_MAIN_FILE = main.typ
 REPORT_OUTPUT_FILE = report.pdf
+
+TOPIC_MAIN_FILE = topic.typ
+TOPIC_OUTPUT_FILE = topic.pdf
 
 DIAGRAMS_DIR = $(REPORT_DIR)/assets
 
@@ -33,6 +37,9 @@ build-docker-typst:
 
 generate-report: generate-diagrams
 	docker run $(DOCKER_RUN_ARGS) -v $(PWD)/$(REPORT_DIR):/src $(TYPST_DOCKER_IMAGE) compile --root /src /src/$(REPORT_MAIN_FILE) /src/$(REPORT_OUTPUT_FILE)
+
+generate-topic:
+	docker run $(DOCKER_RUN_ARGS) -v $(PWD)/$(REPORT_DIR):/src $(TYPST_DOCKER_IMAGE) compile --root /src /src/$(TOPIC_MAIN_FILE) /src/$(TOPIC_OUTPUT_FILE)
 
 build-docker-mermaid:
 	docker build -t $(MERMAID_DOCKER_IMAGE) $(MERMAID_DOCKER_IMAGE_DIR)
