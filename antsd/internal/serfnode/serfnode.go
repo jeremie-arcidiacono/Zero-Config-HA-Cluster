@@ -25,6 +25,11 @@ const clusterName = "antsd-cluster"
 // stateTagKey is the Serf tag carrying the node lifecycle state.
 const stateTagKey = "state"
 
+// reconnectTimeout is how long Serf keeps a failed member in the memberlist before erasing it on its own.
+// It is set far beyond any plausible uptime, because antsd own that erasure: a member disappearing
+// from the memberlist means the rescaling workflow evicted it.
+const reconnectTimeout = 10 * 365 * 24 * time.Hour
+
 type EventType int
 
 const (
@@ -107,6 +112,9 @@ func (node *Node) Start(ctx context.Context) (<-chan Event, error) {
 	conf.LogOutput = nil
 	conf.MemberlistConfig.Logger = logbridge.NewQuietStdLogger(node.logger, "MEMBERLIST")
 	conf.MemberlistConfig.LogOutput = nil
+
+	// Removing a member is the rescaling workflow's job, so Serf must never do it by itself.
+	conf.ReconnectTimeout = reconnectTimeout
 
 	conf.Tags = map[string]string{
 		stateTagKey: string(nodepkg.StateStarting),
