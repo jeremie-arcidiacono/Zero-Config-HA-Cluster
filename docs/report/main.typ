@@ -2,7 +2,7 @@
 #import "@preview/acrostiche:0.7.0": *
 #import "globals.typ": urls
 
-#show: hepia.semester.with(
+#show: hepia.bachelor.with(
   title: [Zero config high-availability cluster],
   short-title: title => [Zero config high-availability cluster], // Vous pouvez utiliser une fonction dans ce format pour créer votre titre court (en-tête de page), sinon le titre est utilisé
   author: (
@@ -33,7 +33,7 @@
     ),
   internship: false,
   confidential: false,
-  orientation: [Informatique logicielle],
+  orientation: "logiciel", //Compléter avec "sécurité" ou "logiciel" ou "embarqué"
   dedication: none,
   acknowledgement: [
     Je souhaite remercier M. Florent Glück pour son encadrement et ses conseils tout au long de ce projet.

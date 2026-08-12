@@ -3,28 +3,12 @@
 
 #let in-outline = state("in-outline", false)
 
-#let month_to_content(m) = {
-  return (
-    "1": [Janvier],
-    "2": [Février],
-    "3": [Mars],
-    "4": [Avril],
-    "5": [Mai],
-    "6": [Juin],
-    "7": [Juillet],
-    "8": [Août],
-    "9": [Setptembre],
-    "10": [Octobre],
-    "11": [Novembre],
-    "12": [Decembre],
-  ).at(str(m))
-}
 
 
 #let chapter_supplement = [Chapitre]
 #let numbered-headings(body) = {
   // Number sections for main document content (except final chapters)
-  show heading.where(level: 1): set heading(
+  show heading.where(level: 1) : set heading(
     numbering: num => chapter_supplement + [~] + numbering("1", num) + [~:],
     supplement: chapter_supplement,
   )
@@ -44,7 +28,7 @@
   counter(heading).update(0)
 
   let format_numbering(..nums) = appendix_supplement + [~] + numbering("1", nums.pos().last()) + [~:]
-  show heading.where(level: 2): set heading(
+  show heading.where(level: 2) : set heading(
     numbering: format_numbering,
     supplement: appendix_supplement,
   )
@@ -58,27 +42,21 @@
     let el = it.element
     if el == none or el.func() != heading { return it }
 
-    if el.level == 1 and el.supplement == chapter_supplement {
-      // Handling chapters references
+    if el.level == 1 and el.supplement == chapter_supplement { // Handling chapters references
       return link(
         el.location(),
-        el.supplement
-          + [~]
-          + numbering(
+        el.supplement + [~] + numbering(
             "1",
-            ..counter(heading).at(el.location()),
-          ),
+            ..counter(heading).at(el.location())
+        )
       )
-    } else if el.level == 2 and el.supplement == appendix_supplement {
-      // Handling appendix references
+    } else if el.level == 2 and el.supplement == appendix_supplement { // Handling appendix references
       return link(
         el.location(),
-        el.supplement
-          + [~]
-          + numbering(
+        el.supplement + [~] + numbering(
             "1",
-            counter(heading).at(el.location()).last(),
-          ),
+            counter(heading).at(el.location()).last()
+        )
       )
     } else { return it }
   }
@@ -93,18 +71,18 @@
   orientation,
   date,
   teachers,
-  clients,
+  clients
 ) = {
+
   set text(font: "Liberation Sans", size: 14pt)
 
   // Logos
-  grid(
-    columns: (1fr, 1fr),
-    align: (left, right),
-    image("../assets/logos/logo-hepia.svg", width: 66%), image("../assets/logos/logo-hes-so-ge.svg", width: 66%),
+  grid(columns: (1fr,1fr), align: (left, right),
+    image("../assets/logos/logo-hepia.svg", width: 66%),
+    image("../assets/logos/logo-hes-so-ge.svg", width: 66%)
   )
 
-  align(center + horizon, [
+  align(center+horizon, [
 
     #v(2fr)
 
@@ -117,7 +95,7 @@
     #block(
       breakable: false,
       height: 30%,
-      illustration.illustration,
+      illustration.illustration
     )
 
     #v(3fr)
@@ -130,13 +108,13 @@
     #v(1fr)
 
     // ISC + Orientation
+    pour l'obtention du titre Bachelor of Science HES-SO en
     #v(1fr)
     #strong[Informatique et systèmes de communication avec orientation en \ #orientation]
 
     #v(2fr)
 
     // Date
-    // TODO: why is it Septembre and not the month of the date as in the header ? yes same as date
     #strong[#month_to_content(date.month()) #datetime.year(date)]
 
     #v(3fr)
@@ -144,9 +122,7 @@
     #set text(size: 12pt)
 
     // Teachers and Clients
-    #grid(
-      columns: (1fr, 1fr),
-      align: center + top,
+    #grid(columns: (1fr, 1fr), align: center+top,
       [
         Professeur-e(s) HES responsable(s)
         #for t in teachers {
@@ -159,7 +135,7 @@
         #for c in clients {
           par(strong(c))
         }
-      ],
+      ]
     )
   ])
 
@@ -173,9 +149,10 @@
     #illustration.legend-source
     #v(0.2fr)
   ]
+
 }
 
-#let semester(
+#let bachelor(
   title: none,
   short-title: title => { title },
   author: (
@@ -191,6 +168,7 @@
   ),
   abstract: none,
   abstract-illustration: [Illustration obligatoire],
+  topic: none,
   internship: true,
   confidential: true,
   date: datetime.today(),
@@ -203,8 +181,10 @@
   appendixes: (),
   bibliography-bytes: none,
   bibliography-style: "iso690-numeric-fr-no-abstract.csl",
+  lang: "fr",
   doc,
 ) = {
+
   //Configure page and text content
   set page(
     paper: "a4",
@@ -225,18 +205,18 @@
   show: common-headings
   show: unnumbered-headings
 
-  set text(font: "Liberation Serif", size: 12pt, lang: "fr") // TODO: verify all fonts
-  set par(first-line-indent: (amount: 1cm, all: true), leading: 1em, spacing: 1.75em, justify: true)
+  set text(font: "Liberation Serif", size: 12pt, lang: lang) // TODO: verify all fonts
+  set par(first-line-indent:  (amount: 1cm, all: true), leading: 1em, spacing: 1.75em, justify: true)
 
   // Two first pages
   title_pages(
     title,
     author,
     illustration,
-    orientation,
+    get_orientation(orientation),
     date,
     teachers,
-    clients,
+    clients
   )
 
   // Same header for the rest of the doc
@@ -265,7 +245,11 @@
   if dedication != none {
     page[
       #v(20%)
-      #align(right, text(font: "Liberation Serif", emph(dedication)))
+      #align(right,
+        text(font: "Liberation Serif",
+          emph(dedication)
+        )
+      )
     ]
   }
 
@@ -275,8 +259,22 @@
     #acknowledgement
   ]
 
-  insert-abstract(
+  insert-pager(
+    [Enoncé du sujet],
+    get_orientation(orientation),
+    none,
+    [#author.firstname #author.lastname],
+    teachers,
+    clients,
+    internship,
+    confidential,
+    topic,
+  )
+
+
+  insert-pager(
     [Résumé],
+    none,
     abstract-illustration,
     [#author.firstname #author.lastname],
     teachers,
@@ -285,6 +283,7 @@
     confidential,
     abstract,
   )
+
 
   // Acronyms
   if acronyms != none {
@@ -301,10 +300,9 @@
     smallcaps(strong[
       Références des url
     ])
-    grid(
-      columns: (0.2fr, 1fr), gutter: 1.3em,
+    grid(columns: (0.2fr, 1fr), gutter: 1.3em,
       ..for (i, url) in figures_urls.enumerate() {
-        ([URL#(i+1)], link(url))
+        ([URL#{i+1}], link(url))
       }
     )
   }
@@ -324,6 +322,8 @@
 
   counter(page).update(1)
 
+  show: format_ref_headings
+
   // Introduction
   [
     = Introduction
@@ -333,7 +333,6 @@
 
 
   show: numbered-headings
-  show: format_ref_headings
 
   doc
 

@@ -27,6 +27,26 @@
   [#link(url), ref. URL#{i+1}]
 }
 
+// Allow a body containing blocks (list, figure, ...)
+#let titled_paragraph(title, body) = {
+  set par(first-line-indent: 0cm)
+  [*#title*: #body]
+}
+
+#let get_orientation(id) = {
+  if id == none {
+    return none
+  } else if lower(id) == "sécurité" {
+    return [Sécurité informatique]
+  } else if lower(id) == "logiciel" {
+    return [Informatique logicielle]
+  } else if lower(id) == "embarqué" {
+    return [Systèmes informatiques embarqués]
+  } else {
+    return text(red)[Entrer "sécurité" ou "logiciel" ou "embarqué"]
+  }
+}
+
 #let common-headings(body) = {
   show smallcaps: set text(font: "Roboto") //TODO: could not work with Liberation / Arial find other font ?
   show heading: smallcaps //TODO: this makes the letter numbering also small caps...
@@ -48,9 +68,17 @@
   body
 }
 
+#let month_to_content(m) = {
+  return (
+    "1": [janvier], "2": [février],  "3": [mars],  "4": [avril],
+    "5": [mai], "6": [juin],  "7": [juillet],  "8": [août],
+    "9": [septembre], "10": [octobre], "11": [novembre], "12": [décembre],
+  ).at(str(m))
+}
 
-#let insert-abstract(
+#let insert-pager(
   title,
+  orientation,
   illustration,
   author,
   teachers,
@@ -60,14 +88,28 @@
   body,
 ) = {
     set par(leading: 0.65em) //TODO
+    //show heading: pad.with(top: 0em, bottom: 0em)
+    heading(
+      {
+        title
+        if orientation != none {
+          text(0.9em)[\ Orientation: #orientation]
+        }
+      },
+      level: 1
+    )
 
-    heading(title, level: 1)
+    v(0.3fr)
 
     body
 
     v(1fr)
-    align(center, illustration)
-    v(1fr)
+
+    if illustration != none {
+      align(center, illustration)
+      v(1fr)
+    }
+
     grid(columns: (0.8fr, 1fr),
       [
         #set par(first-line-indent: 0cm)
