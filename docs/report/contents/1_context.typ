@@ -11,7 +11,7 @@ Il est divisé en trois parties. Nous présentons d'abord Kubernetes et sa distr
 Ces deux présentations reviennent au passage sur les choix effectués lors du projet de semestre@arcidiacono_systeme_2026 et sur ce qui les a motivés.
 Nous exposons enfin les besoins et les contraintes du projet, ainsi que la manière dont certains d'entre eux ont évolué en cours de route.
 
-== Présentation de Kubernetes <title-context-kubernetes>
+== Présentation de Kubernetes <section-context-kubernetes>
 
 Kubernetes@kubernetes_documentation_2026, aussi connu sous le nom de "K8s", intervient en tant qu'orchestrateur de conteneurs open-source.
 Son rôle est d'automatiser le déploiement, la mise à l'échelle et la gestion d'applications conteneurisées sur un
@@ -90,7 +90,7 @@ Cela s'explique par le fait qu'un nœud Server est en fait un Agent avec des res
 
 Dans la suite de ce document, nous utiliserons la terminologie de K3s plutôt que celle de Kubernetes.
 
-== Présentation de Serf <title-context-serf>
+== Présentation de Serf <section-context-serf>
 
 Serf@hashicorp_hashicorpserf_2026 est l'outil retenu pour assurer la découverte des nœuds et la communication entre eux. Dans le mémoire du projet de semestre@arcidiacono_systeme_2026, ce sujet est détaillé plus largement dans la section consacrée à Serf. Ici, nous en gardons seulement les éléments utiles à la compréhension de la solution.
 
@@ -107,7 +107,7 @@ Serf propose aussi plusieurs mécanismes de communication entre nœuds. Les tags
 
 Enfin, Serf peut conserver l'état du cluster sous forme de snapshots. Cela permet à un nœud qui redémarre de retrouver plus rapidement sa place dans le cluster et d'éviter de repartir de zéro. Pour notre projet, cette capacité est utile, car elle rend la reprise après redémarrage plus rapide et plus robuste.
 
-== Présentation des besoins et contraintes <title-context-needs>
+== Présentation des besoins et contraintes <section-context-needs>
 
 Les besoins de ce projet ont trois origines. Ils viennent du produit que ANTS A.I. Systems commercialise, de l'énoncé du travail de Bachelor, et du projet de semestre qui l'a précédé@arcidiacono_systeme_2026, où une première liste de contraintes avait été posée pour cadrer la recherche de solutions existantes.
 

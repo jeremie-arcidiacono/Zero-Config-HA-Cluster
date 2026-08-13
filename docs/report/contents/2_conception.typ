@@ -7,7 +7,7 @@
   Le chapitre précédent a permis de définir le contexte général du projet, de revenir sur différents points abordés durant le projet de semestre@arcidiacono_systeme_2026 et de justifier le choix des technologies fondamentales telles que Kubernetes et Serf. 
   Ce deuxième chapitre détaille la conception du système et l'architecture globale retenue pour répondre au cahier des charges. L'objectif est de présenter les mécanismes décisionnels et l'organisation structurelle de la solution avant d'aborder, dans le chapitre suivant, son implémentation technique détaillée.
 
-== Architecture générale <title-conception-architecture>
+== Architecture générale <section-conception-architecture>
 
   Afin de répondre aux différents besoins et contraintes énumérés précédemment, nous avons conçu une architecture cible pour notre solution. Pour commencer, partons d'une vue d'ensemble de ce système final. Dans la #ref(<fig_conception_layers>), nous avons représenté l'une de nos machines en quatre niveaux.
 
@@ -17,15 +17,15 @@
   image("../assets/diagrams/conception_layers.svg"),
 )
 
-  - *Hardware et OS* : la couche la plus basse, elle représente les composants matériels et le système d'exploitation de nos machines physiques. Voir #ref(<title-conception-ants-os>).
-  - *Couche basse* : composée de ants daemon, qui permet de gérer les machines physiques, de les découvrir, de les provisionner, et de maintenir un état sain au sein du cluster. Voir #ref(<title-conception-antsd>).
-  - *Couche haute* : composée de K3s, la distribution Kubernetes choisie (voir #ref(<title-context-kubernetes>)).
+  - *Hardware et OS* : la couche la plus basse, elle représente les composants matériels et le système d'exploitation de nos machines physiques. Voir #ref(<section-conception-ants-os>).
+  - *Couche basse* : composée de ants daemon, qui permet de gérer les machines physiques, de les découvrir, de les provisionner, et de maintenir un état sain au sein du cluster. Voir #ref(<section-conception-antsd>).
+  - *Couche haute* : composée de K3s, la distribution Kubernetes choisie (voir #ref(<section-context-kubernetes>)).
   - *Application finale* : la couche la plus haute. Elle représente l'application métier exploitée par ANTS A.I. Systems. Elle consomme les services exposés par K3s sans se préoccuper du matériel ni de la logique interne de découverte et de maintenance du cluster.
 
   Cette séparation permet d'isoler clairement les responsabilités. Le matériel et le système d'exploitation fournissent une base stable. antsd assure l'orchestration locale et la cohérence du cluster. K3s fournit l'environnement d'exécution des services conteneurisés. Enfin, l'application finale peut se concentrer sur ses propres fonctionnalités métier.
   Il est important de rappeler que l'application finale n'est pas développée dans le cadre de ce projet.
 
-== ants-os <title-conception-ants-os>
+== ants-os <section-conception-ants-os>
 
 La base du système est une image ARM64 prête à l'emploi. 
 Pour le PoC, elle cible des Raspberry Pi 5, ce qui permet de tester la solution sur une plateforme simple et peu coûteuse, tout en restant proche des machines réelles de ANTS A.I. Systems. 
@@ -42,7 +42,7 @@ Le choix de Packer plutôt que d'autres outils tel que `rpi-image-gen` est motiv
 
 En pratique, ants-os ne fait pas la logique du cluster. Il prépare simplement une machine propre, stable et identique aux autres, pour que antsd et K3s puissent démarrer de manière fiable.
 
-== ants daemon <title-conception-antsd>
+== ants daemon <section-conception-antsd>
 
   Ants-daemon, aussi appelé `antsd`, est un daemon Go qui s'exécute sur chaque machine physique du cluster. Il est responsable de la gestion des machines, de leur découverte, de leur provisionnement et de la maintenance d'un état sain au sein du cluster. Il embarque un agent Serf, auquel il délègue la découverte des machines et la communication entre elles.
   C'est lui qui remplace le rôle humain dans un cluster traditionnel, en automatisant les tâches complexes et manuelles.
@@ -71,7 +71,7 @@ En pratique, ants-os ne fait pas la logique du cluster. Il prépare simplement u
 
   En pratique, ces points d'accès servent de socle à l'onglet de réglages de l'application web finale. L'utilisateur n'interagit donc pas directement avec antsd pour des opérations complexes : il déclenche une action simple, et antsd traduit ensuite cette demande en opérations sur K3s en s'appuyant sur Serf. Pour accéder à cette interface, l'utilisateur saisit simplement l'adresse IP affichée sur un petit écran présent sur les machines ANTS. Cet affichage local évite de devoir chercher l'adresse du cluster par un autre moyen.
 
-=== Bootstrapping <title-conception-bootstrap>
+=== Bootstrapping <part-conception-bootstrap>
 
 Le bootstrapping est la phase qui donne sa forme initiale au cluster. C'est à ce moment que antsd décide si la machine initialise un nouveau cluster ou si elle rejoint un cluster déjà présent sur le réseau local.
 
@@ -126,7 +126,7 @@ Le comportement de antsd tout au long du cycle de vie de la machine est représe
   image("../assets/diagrams/conception_antsd-state-machine.svg"),
 )
 
-Le premier choix distingue un démarrage initial d'un redémarrage connu. Lors d'un premier démarrage, antsd doit déterminer si la machine crée un nouveau cluster ou rejoint un cluster déjà en place. Cette logique, dite de bootstrap, est détaillée dans la section #ref(<title-conception-bootstrap>).
+Le premier choix distingue un démarrage initial d'un redémarrage connu. Lors d'un premier démarrage, antsd doit déterminer si la machine crée un nouveau cluster ou rejoint un cluster déjà en place. Cette logique, dite de bootstrap, est détaillée dans la #ref(<part-conception-bootstrap>, supplement: "partie") de la #ref(<section-conception-antsd>, supplement: [section]).
 Lors d'un redémarrage, la présence d'un état local persisté permet au daemon de retrouver rapidement sa place dans le système sans repartir de zéro. Il se contente alors de vérifier que le rôle installé sur la machine correspond à celui qu'il avait enregistré, puis d'attendre que K3s soit de nouveau prêt. Il ne réinstalle rien.
 Si cet état est illisible, ou incohérent avec l'installation K3s trouvée sur la machine, antsd s'arrête dans un état d'échec plutôt que de retomber sur un premier démarrage : celui-ci réinstallerait K3s par-dessus des données existantes.
 
