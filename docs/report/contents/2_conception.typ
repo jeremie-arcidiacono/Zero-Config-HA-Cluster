@@ -116,18 +116,16 @@ Une fois cette phase terminée, antsd enregistre l'état local nécessaire pour 
 
 === Cycle de vie d'une machine
 
-Le comportement de antsd tout au long du cycle de vie de la machine est représenté sous la forme d'une machine d'états. La #ref(<fig_conception_antsd-state-machine>) détaille les différents états possibles et les transitions.
-
-#highlight("TODO : trouver comment afficher ce diagramme sans que ca soit illisible")
+Le comportement de antsd tout au long du cycle de vie de la machine est représenté sous la forme d'une machine d'états. La #ref(<fig_conception_antsd-state-machine>) en donne les états et les transitions, du démarrage de la machine jusqu'à son arrêt. Le redimensionnement n'y figure que comme une boîte, car il demande une figure à lui seul, présentée plus bas.
 
 #hepia.sourced_figure(
-  caption: [Diagramme de cycle de vie d'une machine],
+  caption: [Cycle de vie d'une machine, hors redimensionnement],
   label: <fig_conception_antsd-state-machine>,
   image("../assets/diagrams/conception_antsd-state-machine.svg"),
 )
 
 Le premier choix distingue un démarrage initial d'un redémarrage connu. Lors d'un premier démarrage, antsd doit déterminer si la machine crée un nouveau cluster ou rejoint un cluster déjà en place. Cette logique, dite de bootstrap, est détaillée dans la section #ref(<title-conception-bootstrap>).
-Lors d'un redémarrage, la présence d'un état local persisté permet au daemon de retrouver rapidement sa place dans le système sans repartir de zéro.
+Lors d'un redémarrage, la présence d'un état local persisté permet au daemon de retrouver rapidement sa place dans le système sans repartir de zéro. Il se contente alors de vérifier que le rôle installé sur la machine correspond à celui qu'il avait enregistré, puis d'attendre que K3s soit de nouveau prêt. Il ne réinstalle rien.
 Si cet état est illisible, ou incohérent avec l'installation K3s trouvée sur la machine, antsd s'arrête dans un état d'échec plutôt que de retomber sur un premier démarrage : celui-ci réinstallerait K3s par-dessus des données existantes.
 
 Ensuite, on distingue deux familles d'états : les états stables et les états de transition. Les états stables correspondent aux machines déjà intégrées au cluster K3s et pleinement fonctionnelles. Les états de transition couvrent la création d'un cluster, l'arrivée d'une machine dans un cluster déjà en service, la reprise après redémarrage, le rescaling et le décommissionnement.
@@ -136,10 +134,31 @@ Cette séparation évite de mélanger des cas qui ne demandent pas les mêmes ac
 
 Le rescaling existe parce que la règle sur le nombre de servers vaut pour toute la vie du cluster, et pas seulement à sa création. Chaque machine qui arrive ou qui disparaît change la population, donc le nombre de servers souhaitable. antsd doit pouvoir promouvoir et rétrograder des nœuds pour suivre cette valeur, sans jamais la laisser devenir paire.
 
-Ce mécanisme ne se déclenche cependant pas à la moindre variation. Si une panne est courte, K3s peut gérer seul la remise en route normale du nœud. antsd intervient surtout quand la panne dure ou quand l'équilibre du cluster n'est plus bon. Il commence alors par retirer du cluster les machines durablement perdues, car une machine morte reste comptée dans la majorité requise et rapproche donc le cluster de la perte de son quorum. Il peut ensuite promouvoir ou rétrograder un nœud depuis l'extérieur du cluster, au lieu de laisser K3s changer le rôle des machines trop tôt. Cette séparation garde le cluster plus stable pendant les redémarrages simples.
+Ce mécanisme ne se déclenche cependant pas à la moindre variation. 
+Si une panne est courte, K3s tentera de gérer seul la situation tant que son quorum est maintenu (replanification des charges de travail, tentative de reprise de contact, ...). 
+antsd intervient surtout quand la panne dure ou quand l'équilibre du cluster n'est plus bon.
+Ce temps d'attente sert également à ne pas réagir à des pannes momentanées, comme un redémarrage d'une machine ou une maintenance temporaire.
 
-Les événements Serf servent enfin à propager ces changements au reste du cluster.
-La machine d'états s'appuie sur les événements Serf comme mécanisme de propagation.
-Chaque changement d'état est diffusé vers le reste du cluster, ce qui permet aux autres
-nœuds d'adapter leur propre comportement sans recourir à des requêtes explicites entre eux.
-antsd conserve ainsi une vision cohérente.
+Un seul server gère alors la manœuvre, celui dont le nom est le plus petit, et il passe pour cela dans l'état `rescale_coordinating`. Il commence par retirer du cluster les machines durablement perdues, car une machine morte reste comptée dans la majorité requise et rapproche donc le cluster de la perte de son quorum. Il désigne ensuite, si c'est nécéssaire, la machine à convertir. Celle-ci passe en `rescale_promoting` ou en `rescale_demoting` selon le sens de la conversion, puis revient à un état stable dans son nouveau rôle.
+
+La #ref(<fig_conception_antsd-rescaling>) reprend cette partie de la machine d'états, laissée de côté sur la figure précédente.
+
+#hepia.sourced_figure(
+  caption: [États du redimensionnement],
+  label: <fig_conception_antsd-rescaling>,
+  image("../assets/diagrams/conception_antsd-rescaling.svg"),
+)
+
+Reste la fin de vie de la machine, où deux sorties sont possibles. 
+Premièrement, un arrêt de antsd.
+Il ne change pas son état et s'arrête sans prévenir le reste du cluster. 
+C'est volontaire : les autres machines doivent voir celle-ci comme perdue (`failed` dans la liste de membres de Serf) et non comme partie (`left`), sans quoi un simple redémarrage serait pris pour un départ définitif. 
+Soit la machine revient, soit la machine ne revient pas (suite à une défaillance matérielle par exemple).
+Dans ce second cas, le mécanisme de rescaling décrit plus haut supprimera la machine.
+
+La seconde sortie possible est le décommissionnement : il annonce le départ, retire le nœud du cluster K3s et efface l'état local, parce que la machine n'est pas censée revenir.
+
+La propagation de tous ces changements repose sur les tags Serf. Chaque machine publie son état courant dans un tag, que Serf réplique auprès de tous les membres.
+Les autres nœuds adaptent ainsi leur comportement sans avoir à s'interroger mutuellement, et antsd conserve une vision cohérente du cluster.
+Serf sert aussi à diffuser des événements ponctuels, comme le signal de départ du bootstrap ou la désignation d'une machine à convertir, mais l'état lui-même passe toujours par les tags.
+

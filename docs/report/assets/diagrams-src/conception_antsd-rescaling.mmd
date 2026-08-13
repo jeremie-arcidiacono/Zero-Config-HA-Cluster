@@ -1,0 +1,34 @@
+---
+config:
+  flowchart:
+    htmlLabels: false
+    nodeSpacing: 50
+    rankSpacing: 55
+  htmlLabels: false
+  theme: base
+  themeVariables:
+    edgeLabelBackground: "#FFFFFF"
+---
+flowchart TD
+    stable_server(["stable_server"])
+    stable_agent(["stable_agent"])
+
+    stable_server -->|"Ce nœud est coordinateur\net la taille du cluster\na changé"| coordinating["rescale_coordinating"]
+    coordinating --> stable_server
+
+    stable_agent -->|"Désigné par\nle coordinateur"| promoting["rescale_promoting"]
+    promoting --> stable_server
+
+    stable_server -->|"Désigné par\nle coordinateur"| demoting["rescale_demoting"]
+    demoting --> stable_agent
+
+    promoting -->|"Échec"| rescale_failed["rescale_failed"]
+    demoting -->|"Échec"| rescale_failed
+
+    classDef stable fill:#C8E6C9,stroke:#1B5E20,stroke-width:2px,color:#000
+    classDef transition fill:#FFE0B2,stroke:#E65100,color:#000
+    classDef terminal fill:#FFCDD2,stroke:#B71C1C,color:#000
+
+    class stable_server,stable_agent stable
+    class coordinating,promoting,demoting transition
+    class rescale_failed terminal
