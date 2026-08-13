@@ -104,7 +104,9 @@ Les machines dont la position tombe dans ce quota deviennent servers, les autres
 Les machines suivantes rejoignent alors le cluster selon leur position.
 Celles qui doivent devenir des servers le font une par une, dans l'ordre, car la base de données interne de K3s n'accepte qu'un ajout de membre à la fois. Celles qui deviennent des agents attendent que les servers attendus soient en place, puis rejoignent le cluster toutes ensemble.
 
-La #ref(<fig_conception_bootstrap-sequence>) détaille cette deuxième partie du bootstrap. On y voit le passage en mode d'attente, puis l'installation du premier nœud en mode initialisation, l'arrivée en série des autres servers et enfin celle des agents.
+La #ref(<fig_conception_bootstrap-sequence>) détaille cette deuxième partie du bootstrap. On y voit l'installation du premier nœud en mode initialisation, puis l'arrivée en série des autres servers, chacun attendant de voir le précédent devenir stable, et enfin celle de l'agent.
+Le tag Serf est ce qui porte cette information d'un nœud à l'autre.
+Note : les broadcast de tag Serf ("tag Serf") sont en réalité diffusés à chaques machines, mais par souci d'économie de place, nous avons réduit le nombre de mentions sur le diagramme. 
 
 #hepia.sourced_figure(
   caption: [Séquence du mécanisme de bootstrapping],
