@@ -5,29 +5,40 @@ config:
   htmlLabels: false
   theme: base
   themeVariables:
-    edgeLabelBackground: "#c385ff"
+#    todo : find better color for background ?
+    edgeLabelBackground: "#FFFFFF"
 ---
 flowchart TB
-    Client((Requêtes externes HTTP))
-    ReseauSerf((Autres instances Serf sur le réseau))
-    ServiceK3s((Service local K3s))
+    Client([Client HTTP])
+    ReseauSerf([Autres instances Serf sur le réseau])
+    ServiceK3s([Service local K3s])
 
     subgraph antsd [antsd]
         direction TB
-        API[Points d'accès HTTP Contrôle et Monitoring]
-        ClusterMgr[Gestionnaire de Cluster Logique décisionnelle centrale]
-        K3sMod[Module de Communication K3s]
-        SerfWrap[Instance Serf]
-        Store[(Persistance locale StateStore)]
+        API["Points d'accès HTTP\n(contrôle et supervision)"]
+        ClusterMgr["Gestionnaire de cluster\n(logique décisionnelle)"]
+        K3sMod["Module de\ncommunication K3s"]
+        SerfWrap["Instance Serf"]
+        Store[("Persistance\nlocale")]
 
         API -->|Commandes| ClusterMgr
-        SerfWrap <-->|Événements et requêtes| ClusterMgr
-        ClusterMgr -->|Mises à jour des tags| SerfWrap
-        ClusterMgr -->|Instructions de configuration| K3sMod
-        ClusterMgr <-->|Lecture/Écriture| Store
+        SerfWrap <-->|"Événements\net tags"| ClusterMgr
+        ClusterMgr -->|Configuration| K3sMod
+        ClusterMgr <-->|"Lecture\nécriture"| Store
     end
 
     Client --> API
     SerfWrap <--> ReseauSerf
     K3sMod <--> ServiceK3s
-    
+
+    classDef externe fill:#ECEFF1,stroke:#546E7A,stroke-width:1px,color:#263238
+    classDef coeur fill:#FFE0B2,stroke:#E65100,stroke-width:2px,color:#000
+    classDef interne fill:#BBDEFB,stroke:#0D47A1,stroke-width:1px,color:#000
+    classDef donnees fill:#C8E6C9,stroke:#1B5E20,stroke-width:1px,color:#000
+
+    class Client,ReseauSerf,ServiceK3s externe
+    class ClusterMgr coeur
+    class API,K3sMod,SerfWrap interne
+    class Store donnees
+
+    style antsd fill:#FAFAFA,stroke:#9E9E9E,stroke-dasharray: 5 5
