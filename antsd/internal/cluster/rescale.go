@@ -1,6 +1,6 @@
 package cluster
 
-// Rescaling workflow: eviction, promotion and demotion.
+// Rescaling workflow: cleaning, eviction, promotion and demotion.
 //
 // This workflow keeps the cluster in the right shape during its life.
 //
@@ -20,6 +20,9 @@ package cluster
 // The cluster-wide mutex is isEtcdMembershipChanging() to avoid multiple
 // operation (joining, rescaling, ...) at the same time.
 // Every coordinator step is idempotent: it can die mid-repair, and the next coordinator will redo the work.
+//
+// The workflow also reacts to the forget-me protocol request.
+// The coordinator is responsible for the cleanup of the leftover K3s node.
 
 import (
 	"context"
@@ -73,6 +76,10 @@ type rescaleProgress struct {
 
 	// evicting names the machines the current round removes. Empty outside an eviction round.
 	evicting []string
+
+	// cleaning names the machine whose K3s leftovers the current round erases, on behalf of the
+	// forget-me protocol. Empty outside such a round.
+	cleaning string
 }
 
 func (r *rescaleProgress) stopTimer() {
@@ -116,6 +123,7 @@ func (r *rescaleProgress) forget() {
 	r.imbalanceControlPlaneSince = time.Time{}
 	r.order = rescaleOrder{}
 	r.evicting = nil
+	r.cleaning = ""
 }
 
 // maybeRescale is the detection half of the workflow, run on every Serf event and timer expiry.
@@ -297,7 +305,11 @@ func (m *Manager) prepareConversion(ctx context.Context, name string) error {
 
 // onRescaleCoordinationDone finishes a coordination round whose cluster-side work succeeded.
 func (m *Manager) onRescaleCoordinationDone() {
-	if m.rescale.order.Target == "" { // The round was an eviction, not a conversion.
+	switch {
+	case m.rescale.cleaning != "": // A machine on its first boot asked to be forgotten.
+		m.finishForgetting()
+		return
+	case m.rescale.order.Target == "": // The round is an eviction.
 		m.finishEviction()
 		return
 	}
@@ -425,6 +437,7 @@ func (m *Manager) abandonCoordination(err error) {
 
 	m.rescale.order = rescaleOrder{}
 	m.rescale.evicting = nil
+	m.rescale.cleaning = "" // No confirmation is sent: the machine asks again and a later round answers.
 	m.rescale.imbalanceControlPlaneSince = time.Time{}
 
 	// A coordination round changes nothing on the coordinator itself, so no terminal state is needed.

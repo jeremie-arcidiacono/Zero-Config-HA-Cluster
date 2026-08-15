@@ -51,6 +51,12 @@ const (
 	// settle before picking the server it joins through.
 	StateJoiningWaiting State = "fb_joining_waiting"
 
+	// StateJoiningCleanup means the node asked the cluster to forget the K3s node it may still
+	// know under this name, and waits for the confirmation before installing anything.
+	// Prevent a machine that was factory reset from coming back with the same name and enter in conflict with
+	// a previous installation that was not erased from the K3s cluster.
+	StateJoiningCleanup State = "fb_joining_cleanup"
+
 	// StateJoiningAgent means the node is installing K3s as an agent of the
 	// cluster it discovered. A newcomer always joins as an agent, whatever the
 	// size of the control plane: growing it belongs to the rescaling workflow.
@@ -93,6 +99,24 @@ const (
 	// StateStableAgent means the node runs a K3s agent.
 	StateStableAgent State = "stable_agent"
 )
+
+// IsFirstBoot reports whether the state belongs to the first-boot protocol, meaning the node has
+// never completed an installation: it holds no persisted state and runs no K3s.
+//
+// It is what proves a machine is virgin, so anything the cluster still knows under its name is a
+// leftover of a previous life.
+func (s State) IsFirstBoot() bool {
+	switch s {
+	case StateDiscovering,
+		StateBootstrapConfirm, StateBootstrapWaiting,
+		StateBootstrapInstallInit, StateBootstrapInstallServer, StateBootstrapInstallAgent,
+		StateBootstrapFailed,
+		StateJoiningWaiting, StateJoiningCleanup, StateJoiningAgent, StateJoiningFailed:
+		return true
+	default:
+		return false
+	}
+}
 
 // InCluster reports whether the state means the node already belongs to a K3s cluster:
 // it runs in one, is coming back to one, is changing its role, or failed to.

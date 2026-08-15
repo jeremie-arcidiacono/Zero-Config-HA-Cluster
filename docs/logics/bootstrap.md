@@ -26,6 +26,8 @@ Ce qui nous donne les états suivants :
 - `fb_joining_XXXX` : la machine a découvert un cluster existant, elle le rejoint (aucune action utilisateur)
     - `fb_joining_waiting` : un server à rejoindre a été vu, on laisse le membership se stabiliser avant de choisir la
       cible du join
+    - `fb_joining_cleanup` : la machine demande au cluster d'oublier le nœud K3s qu'il connaît peut-être encore sous son
+      nom, et attend la confirmation (voir [protocole forget-me](#protocole-forget-me))
     - `fb_joining_agent` : la machine installe K3s en mode agent.
     - `fb_joining_failed` : échec du processus de joining. la machine ne progresse plus
 - `stable_XXXX` : la machine fait partie d'un cluster K3s, cet état ne fait plus partie du protocole de 1er démarrage
@@ -58,7 +60,8 @@ flowchart TD
     A -- Détection d'un server à rejoindre --> E[fb_joining_waiting\nAttente X sec\nÉcran B]
     C -- Détection d'un server hors de sa cohorte --> E
     D -- Détection d'un server hors de sa cohorte --> E
-    E --> L[fb_joining_agent\nInstallation de \nk3s agent]
+    E --> K[fb_joining_cleanup\nDemande au cluster d'oublier son nom\nAttente de la confirmation]
+    K --> L[fb_joining_agent\nInstallation de \nk3s agent]
     L -- Si la population le demande --> M[Promotion par le rescaling\nvoir rescaling.md]
     style C fill: #664600, color: #000
     style D fill: #664600, color: #000
@@ -204,7 +207,46 @@ de choisir la cible du join. La décision est réévaluée à chaque événement
 Une machine qui ne voit plus aucun server joignable attend, elle ne retombe jamais sur le bootstrapping.
 
 Les agents ne touchent pas au membership etcd, donc les machines qui arrivent s'installent en parallèle, sans prendre le
-mutex `isEtcdMembershipChanging()`.
+mutex `isEtcdMembershipChanging()`. La seule exception est le protocole ci-dessous, et uniquement pour une machine qui
+a réellement des restes à effacer.
+
+### Protocole forget-me
+
+Avant d'installer quoi que ce soit, la machine passe par `fb_joining_cleanup` :
+
+1. elle vérifie localement qu'aucun K3s n'est installé chez elle (`ensureK3sIsNotInstalled`),
+2. elle diffuse `antsd:forget-me {name}`,
+3. le coordinateur cherche un nœud K3s portant ce nom, l'efface s'il existe, et répond `antsd:forgotten {name}`,
+4. la machine installe son agent.
+
+Pourquoi :  
+Une remise à zéro est purement locale : le bouton physique est piloté par un firmware qui ne sait rien du
+cluster, d'antsd, etc., donc la machine ne peut rien demander en partant.
+Le cluster garde alors un fantôme d'elle : son objet `Node` et son membre etcd si elle était server.
+Comme le nom est dérivé de l'adresse MAC, elle revient avec le même, et le fantôme devient problématique :
+K3s refuse d'enregistrer un nœud dont le mot de passe ne
+correspond plus au secret conservé, et un membre etcd fantôme garde sa place dans le quorum, ce qui bloque toute
+promotion ultérieure.
+L'éviction du rescaling ne peut pas intervenir puisqu'elle ne retire que les machines que Serf
+voit en panne, et celle-ci est de retour et vivante (c'est ce qui est logique après une remise à zéro).
+
+La machine attend indéfiniment la confirmation, et n'installe jamais sans elle.
+
+Le coordinateur commence par une simple lecture (`NodeExists`), qui ne coute rien : une machine dont
+le cluster ne sait rien est confirmée immédiatement, même pendant si une conversion est en cours par exemple.
+Seule une machine qui a réellement des restes attend, parce que les effacer peut emporter un membre etcd.
+
+Deux GUARD :
+
+- **Locale**, avant de demander : une machine qui a un K3s installé mais pas de fichier d'état rejoue le premier
+  démarrage alors que son K3s tourne et est enregistré. Elle s'arrête donc avant de
+  demander, en `fb_joining_failed` : cette machine demande une remise à zéro.
+- **Coordinateur** : il n'efface que le nom d'un membre que Serf voit vivant et en premier démarrage
+  (`isVirginMember`). Si le membre est déjà stable, il ne l'efface pas.
+
+Limite connue : un membre etcd dont l'objet `Node` n'a jamais été créé reste invisible.
+C'est possible si l'installation d'un server expire entre l'ajout du membre etcd et l'enregistrement du kubelet.
+C'est un cas rare, qui demanderait une interface au niveau de l'etcd (ce qui est pas forcément souhaitable).
 
 #### Pourquoi pas de join en server
 
@@ -247,7 +289,7 @@ Réinitialiser toutes les machines n'est pas utile : les servers déjà install�
 En plus cela demande à l'utilisateur une plus grande implication.
 Donc la machine dont l'écran affiche l'échec est celle qu'on réinitialise.
 
-Deux protections rendent cette procédure plus sûre :
+Trois protections rendent cette procédure plus sûre :
 
 - **Aucune installation K3s sur une machine non vierge.** Avant chaque installation du first-boot (bootstrapping ou
   joining), antsd vérifie qu'aucun systemd unit K3s n'existe (avec `InstalledRole`). Si une installation est trouvée,
@@ -255,3 +297,20 @@ Deux protections rendent cette procédure plus sûre :
 - **Aucune création de cluster à côté d'un cluster existant.** Un membre Serf appartenant déjà à un cluster fait
   refuser le bouton de l'écran A, et fait refuser le `--cluster-init` à N0 si le cluster n'apparaît qu'après.
   Les membres `failed` comptent aussi : un nœud tombé peut revenir, et il reviendra avec ses données K3s.
+- **Aucune installation avant que le cluster ait oublié la vie précédente de la machine.** La remise à zéro n'efface
+  que le disque local, donc le cluster garde l'objet `Node` et le membre etcd de la machine réinitialisée.
+  C'est le [protocole forget-me](#protocole-forget-me) qui les supprime, à son retour.
+
+### Ce que la remise à zéro ne peut pas faire
+
+La remise à zéro est locale par construction : sur la machine ANTS, c'est un bouton physique piloté par un firmware
+indépendant d'antsd, qui ne sait rien du cluster. Elle ne peut donc pas prévenir le cluster.
+
+Tout le nettoyage côté cluster se fait donc ailleurs, soit :
+
+- la machine revient : le protocole forget-me efface son nom avant qu'elle ne réinstalle,
+- la machine ne revient pas : Serf la voit en panne, et l'[éviction du rescaling](rescaling.md) la retire après la
+  période de grâce.
+
+Ces deux chemins couvrent tous les cas parce que le nom d'une machine est stable (dérivé de son adresse MAC) : une
+machine réinitialisée revient sous le nom exact de son fantôme, jamais sous un autre.

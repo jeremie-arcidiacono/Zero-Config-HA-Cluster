@@ -43,6 +43,8 @@ const (
 	// Internal notifications.
 	cmdBootstrapWaitExpired
 	cmdJoinWaitExpired
+	cmdForgetRetry
+	cmdForgetProbed
 	cmdRescaleCheck
 	cmdK3sOperationSucceeded
 	cmdK3sOperationFailed
@@ -53,6 +55,10 @@ type command struct {
 	typ   commandType
 	err   error        // set for cmdK3sOperationFailed
 	reply chan<- error // set for user actions awaiting a result
+
+	// name and found carry the result of the K3s lookup triggered by a forget-me request.
+	name  string
+	found bool
 }
 
 // Manager is the central orchestrator of antsd. It owns the lifecycle of the
@@ -78,6 +84,8 @@ type Manager struct {
 	bootstrapWaitDelay time.Duration
 	// joinWaitDelay is the fb_joining_waiting grace period.
 	joinWaitDelay time.Duration
+	// forgetRetryInterval is the delay between two forget-me requests.
+	forgetRetryInterval time.Duration
 	// evictionGrace is how long a machine must stay continuously Serf-failed before the
 	// rescaling workflow evicts it.
 	evictionGrace time.Duration
@@ -123,18 +131,19 @@ func newManager(
 	controlPlane k3s.ControlPlane,
 ) *Manager {
 	m := &Manager{
-		config:             conf,
-		logger:             logger,
-		startedAt:          startedAt,
-		serf:               serf,
-		installer:          installer,
-		controlPlane:       controlPlane,
-		commands:           make(chan command, 16),
-		state:              node.StateStarting,
-		bootstrapWaitDelay: bootstrapWaitDelay,
-		joinWaitDelay:      joinWaitDelay,
-		evictionGrace:      conf.EvictionGrace,
-		rescaleSettleDelay: conf.RescaleSettleDelay,
+		config:              conf,
+		logger:              logger,
+		startedAt:           startedAt,
+		serf:                serf,
+		installer:           installer,
+		controlPlane:        controlPlane,
+		commands:            make(chan command, 16),
+		state:               node.StateStarting,
+		bootstrapWaitDelay:  bootstrapWaitDelay,
+		joinWaitDelay:       joinWaitDelay,
+		forgetRetryInterval: forgetRetryInterval,
+		evictionGrace:       conf.EvictionGrace,
+		rescaleSettleDelay:  conf.RescaleSettleDelay,
 	}
 	m.stateView.Store(node.StateStarting)
 	return m
@@ -280,6 +289,10 @@ func (m *Manager) handleCommand(c command) {
 		m.onBootstrapWaitExpired()
 	case cmdJoinWaitExpired:
 		m.onJoinWaitExpired()
+	case cmdForgetRetry:
+		m.onForgetRetry()
+	case cmdForgetProbed:
+		m.onForgetProbed(c.name, c.found)
 	case cmdRescaleCheck:
 		m.onRescaleCheck()
 	case cmdK3sOperationSucceeded:
@@ -308,6 +321,8 @@ func (m *Manager) onK3sOperationSucceeded() {
 	switch m.state {
 	case node.StateBootstrapInstallInit, node.StateBootstrapInstallServer, node.StateBootstrapInstallAgent:
 		m.onBootstrapInstallSucceeded()
+	case node.StateJoiningCleanup:
+		m.onJoiningCleanupChecked()
 	case node.StateJoiningAgent:
 		m.onJoiningInstallSucceeded()
 	case node.StateRejoinCluster:
@@ -326,6 +341,8 @@ func (m *Manager) onK3sOperationFailed(err error) {
 	switch m.state {
 	case node.StateBootstrapInstallInit, node.StateBootstrapInstallServer, node.StateBootstrapInstallAgent:
 		m.failBootstrap(fmt.Errorf("k3s installation failed: %w", err))
+	case node.StateJoiningCleanup:
+		m.failJoining(err) // We cannot join if we have a k3s installation left behind, so fail early without asking for cleanup.
 	case node.StateJoiningAgent:
 		m.failJoining(fmt.Errorf("k3s installation failed: %w", err))
 	case node.StateRejoinCluster:
@@ -366,6 +383,10 @@ func (m *Manager) handleUserEvent(e serfnode.Event) {
 		m.onBootstrapStart()
 	case eventRescaleConvert:
 		m.onRescaleConvert(e.Payload)
+	case eventForgetMe:
+		m.onForgetMe(e.Payload)
+	case eventForgotten:
+		m.onForgotten(e.Payload)
 	default:
 		m.logger.Debug("ignoring unknown serf user event", "name", e.Name)
 	}

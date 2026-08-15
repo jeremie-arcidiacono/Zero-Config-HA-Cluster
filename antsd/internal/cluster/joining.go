@@ -28,11 +28,17 @@ const joinWaitDelay = 10 * time.Second
 
 // joiningProgress carries the joining path state between run-loop iterations.
 type joiningProgress struct {
-	// timer is the fb_joining_waiting grace timer.
+	// timer is the fb_joining_waiting grace timer, then the forget-me retry timer.
 	timer *time.Timer
 
 	// settled tells whether the grace period is over, meaning the node can install.
 	settled bool
+
+	// cleaned tells whether the cluster confirmed it knows no K3s node under this name.
+	cleaned bool
+
+	// forgetAttempts counts the forget-me requests sent, only to space out the log warnings.
+	forgetAttempts int
 }
 
 func (j *joiningProgress) stopTimer() {
@@ -91,6 +97,11 @@ func (m *Manager) maybeJoinCluster(view clusterView) {
 	// Read again: the server seen when the divert happened may be gone.
 	target, found := view.findK3sJoinTarget()
 	if !found {
+		return
+	}
+
+	if !m.joining.cleaned {
+		m.startForgetMe()
 		return
 	}
 	m.joinAsAgent(target.IP)

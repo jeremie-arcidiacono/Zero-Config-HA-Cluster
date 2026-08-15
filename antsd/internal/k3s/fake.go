@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/node"
@@ -109,13 +110,22 @@ type FakeControlPlane struct {
 	// Delay overrides fakeInstallDelay when set (used by tests to run faster).
 	Delay time.Duration
 
-	// deleted holds the node objects a simulated repair removed.
-	deleted map[string]bool
+	// known holds the node objects the simulated cluster has. A name missing from it is unknown to K3s.
+	mu    sync.Mutex
+	known map[string]bool
 }
 
 // NewFakeControlPlane returns a ControlPlane that only simulates cluster operations.
 func NewFakeControlPlane(logger *slog.Logger) *FakeControlPlane {
-	return &FakeControlPlane{logger: logger, Delay: fakeInstallDelay, deleted: make(map[string]bool)}
+	return &FakeControlPlane{logger: logger, Delay: fakeInstallDelay, known: make(map[string]bool)}
+}
+
+// AddNode makes the simulated cluster know a node object under that name, so a test can stage what
+// K3s still holds of a machine that was factory reset.
+func (f *FakeControlPlane) AddNode(name string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.known[name] = true
 }
 
 func (f *FakeControlPlane) DrainNode(ctx context.Context, name string) error {
@@ -126,12 +136,17 @@ func (f *FakeControlPlane) DeleteNode(ctx context.Context, name string) error {
 	if err := f.simulate(ctx, "delete node", name); err != nil {
 		return err
 	}
-	f.deleted[name] = true
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.known, name)
 	return nil
 }
 
 func (f *FakeControlPlane) NodeExists(_ context.Context, name string) (bool, error) {
-	return !f.deleted[name], nil
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.known[name], nil
 }
 
 func (f *FakeControlPlane) simulate(ctx context.Context, operation, name string) error {

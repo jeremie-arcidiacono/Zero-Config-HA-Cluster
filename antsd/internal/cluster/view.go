@@ -66,6 +66,16 @@ func (v clusterView) findExistingK3sClusterMember() (admin.Member, bool) {
 	return admin.Member{}, false
 }
 
+// isVirginMember reports whether a member is alive and still running the first-boot protocol.
+func (v clusterView) isVirginMember(name string) bool {
+	for _, member := range v.snapshot.Members {
+		if member.Name == name {
+			return member.Status == memberStatusAlive && node.State(member.Tags["state"]).IsFirstBoot()
+		}
+	}
+	return false
+}
+
 // stableServerCount returns how many alive members currently expose the stable_server state.
 func (v clusterView) stableServerCount() int {
 	count := 0
