@@ -39,6 +39,11 @@ const (
 	// rescaleConvertTimeout bounds a whole conversion: reinstalling K3s with the other role, then
 	// waiting for it to report ready. See firstBootTimeout for more info.
 	rescaleConvertTimeout = 10 * time.Minute
+
+	// rescaleCoordinationTimeout bounds a whole coordination round.
+	// Needed to avoid rescale_coordinating from holding the etcd mutex forever.
+	// Can be short because an abandoned round is retried.
+	rescaleCoordinationTimeout = 5 * time.Minute
 )
 
 // eventRescaleConvert carries the coordinator's order to the machine that must change role.
@@ -126,6 +131,14 @@ func (r *rescaleProgress) forget() {
 	r.cleaning = ""
 }
 
+// resetProgress clears what the previous round left.
+func (r *rescaleProgress) resetProgress() {
+	r.stopTimer()
+	r.order = rescaleOrder{}
+	r.evicting = nil
+	r.cleaning = ""
+}
+
 // maybeRescale is the detection half of the workflow, run on every Serf event and timer expiry.
 func (m *Manager) maybeRescale(view clusterView) {
 	if !m.config.RescaleEnabled {
@@ -183,6 +196,17 @@ func (m *Manager) trackImbalance(view clusterView, now time.Time) (settled bool,
 	return !deadline.After(now), deadline
 }
 
+// startCoordinationRound enters rescale_coordinating and runs the cluster-side work of a round.
+func (m *Manager) startCoordinationRound(op func(ctx context.Context) error) {
+	m.transition(node.StateRescaleCoordinating)
+
+	m.startK3sOperation(func(ctx context.Context) error {
+		ctx, cancel := context.WithTimeout(ctx, rescaleCoordinationTimeout)
+		defer cancel()
+		return op(ctx)
+	})
+}
+
 // startEviction removes from the cluster the machines that have been gone for too long.
 func (m *Manager) startEviction(names []string) {
 	m.logger.Info("evicting the machines that are durably gone",
@@ -190,12 +214,10 @@ func (m *Manager) startEviction(names []string) {
 
 	// Nodes are not drained: a machine Serf reports as failed answers nothing, so it cannot be asked to drain.
 
-	m.rescale.stopTimer()
+	m.rescale.resetProgress()
 	m.rescale.evicting = names
-	m.rescale.order = rescaleOrder{}
-	m.transition(node.StateRescaleCoordinating)
 
-	m.startK3sOperation(func(ctx context.Context) error {
+	m.startCoordinationRound(func(ctx context.Context) error {
 		for _, name := range names {
 			if err := m.controlPlane.DeleteNode(ctx, name); err != nil {
 				return fmt.Errorf("delete the node object of %s: %w", name, err)
@@ -237,14 +259,12 @@ func (m *Manager) startConversion(view clusterView) bool {
 		"target", target.Name, "new_role", role,
 		"servers", view.k3sServerCount(), "wanted", view.desiredServerCount())
 
-	m.rescale.stopTimer()
+	m.rescale.resetProgress()
 	m.rescale.imbalanceControlPlaneSince = time.Time{}
-	m.rescale.evicting = nil
 	m.rescale.order = rescaleOrder{Target: target.Name, Role: role, JoinIP: m.serf.LocalIP()}
-	m.transition(node.StateRescaleCoordinating)
 
 	name := target.Name
-	m.startK3sOperation(func(ctx context.Context) error {
+	m.startCoordinationRound(func(ctx context.Context) error {
 		return m.prepareConversion(ctx, name)
 	})
 	return true

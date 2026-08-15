@@ -203,13 +203,10 @@ func (m *Manager) onForgetProbed(name string, found bool) {
 
 	m.logger.Info("erasing what K3s still knows about a machine on its first boot", "node", name)
 
-	m.rescale.stopTimer()
+	m.rescale.resetProgress()
 	m.rescale.cleaning = name
-	m.rescale.evicting = nil
-	m.rescale.order = rescaleOrder{}
-	m.transition(node.StateRescaleCoordinating)
 
-	m.startK3sOperation(func(ctx context.Context) error {
+	m.startCoordinationRound(func(ctx context.Context) error {
 		return m.controlPlane.DeleteNode(ctx, name)
 	})
 }

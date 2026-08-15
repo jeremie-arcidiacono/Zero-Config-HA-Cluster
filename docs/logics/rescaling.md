@@ -61,6 +61,11 @@ Le test du mutex précède le rescaling, donc une machine immobilisée dans un d
 réparations du cluster (y compris celle qui la débloquerait). Les installations et les conversions sont bornées et
 tombent dans un état terminal qui libère le mutex.
 
+`rescale_coordinating` à un timeout, mais son expiration n'est pas terminale : le tour est abandonné, la machine
+redevient `stable_server` et le prochain coordinateur refait le travail.
+Le délai est donc bien plus court que celle d'une installation.
+Elle est nécessaire parce que le coordinateur y appelle kubectl, qui pourrait rester bloqué.
+
 ## Chorégraphie
 
 ```mermaid
