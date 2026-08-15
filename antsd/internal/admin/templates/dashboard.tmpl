@@ -57,8 +57,8 @@
             background: #f3f4f6;
         }
 
-        .member-status {
-            font-weight: 600;
+        .local-node td {
+            font-weight: 700;
         }
 
         .empty {
@@ -85,6 +85,23 @@
             background: #e0f2fe;
             color: #075985;
             font-family: ui-monospace, monospace;
+        }
+
+        .badge {
+            display: inline-block;
+            margin-left: 0.5rem;
+            padding: 0.1rem 0.5rem;
+            border-radius: 999px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            vertical-align: middle;
+        }
+
+        .badge.status-bad {
+            background: #ef4444;
+            color: #fff;
         }
 
         .actions {
@@ -197,26 +214,21 @@
     <tr>
         <th>Name</th>
         <th>IP</th>
-        <th>Status</th>
         <th>State</th>
-        <th>Tags</th>
     </tr>
     </thead>
     <tbody>
+    {{ $localNodeName := .NodeName }}
     {{ range .Members }}
-    <tr>
-        <td>{{ .Name }}</td>
-        <td>{{ .IP }}</td>
-        <td class="member-status">{{ .Status }}</td>
-        <td>{{ index .Tags "state" }}</td>
+    <tr{{ if eq .Name $localNodeName }} class="local-node"{{ end }}>
         <td>
-            {{ $tags := .OtherTags }}
-            {{ if $tags }}
-            {{ range $tags }}<span class="tag">{{ .Key }}={{ .Value }}</span>{{ end }}
-            {{ else }}
-            <span class="empty">-</span>
+            {{ .Name }}
+            {{ if ne .Status "alive" }}
+            <span class="badge status-bad">{{ .Status }}</span>
             {{ end }}
         </td>
+        <td>{{ .IP }}</td>
+        <td>{{ index .Tags "state" }}</td>
     </tr>
     {{ end }}
     </tbody>
