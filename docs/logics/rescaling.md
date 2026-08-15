@@ -58,8 +58,8 @@ etcd indisponible pour un changement de role (qui implique une suppression ou aj
 
 Attention avec ce mutex : tout état qui le prend doit avoir une durée bornée.
 Le test du mutex précède le rescaling, donc une machine immobilisée dans un de ces états gèle toutes les
-réparations du cluster (y compris celle qui la débloquerait). Les installations et les conversions sont bornées et
-tombent dans un état terminal qui libère le mutex.
+réparations du cluster (y compris celle qui la débloquerait).
+Les installations, les conversions et le redémarrage sont bornés et tombent dans un état terminal qui libère le mutex.
 
 `rescale_coordinating` à un timeout, mais son expiration n'est pas terminale : le tour est abandonné, la machine
 redevient `stable_server` et le prochain coordinateur refait le travail.
@@ -156,10 +156,9 @@ L'image ants-os a donc une copie intacte dans `/usr/lib/ants/k3s/`, un emplaceme
 ## Limites connues
 
 1. **Une machine évincée qui revient est un zombie.** Elle rejoint Serf en `alive`, mais son K3s ne peut pas rejoindre
-   un cluster etcd dont il a été retiré : elle reste indéfiniment en `rejoin_cluster` (l'absence de timeout
-   délibérée). Et `rejoin_cluster` compte comme un changement de membership etcd en cours, donc elle **bloque tout
-   futur ajout de server et tout futur rescaling**. La récupération passe par une réinitialisation d'usine. La
-   détection appartient à la surveillance de panne, pas à ce workflow.
+   un cluster etcd dont il a été retiré. Elle ne bloque pas le reste du système : `rejoinTimeout`
+   la fait tomber en `rejoin_failed`, qui ne prend pas le mutex. La machine elle-même reste perdue et sa
+   récupération passe par une réinitialisation d'usine.
 2. **Fenêtre de crash entre la réinstallation et la persistance.** Un crash après une conversion réussie mais avant
    l'écriture du fichier d'état laisse disque = server et état persisté = agent, donc `rejoin_failed` au redémarrage.
    L'état n'est écrit qu'après la disponibilité (comme le fait déjà `becomeStable`).

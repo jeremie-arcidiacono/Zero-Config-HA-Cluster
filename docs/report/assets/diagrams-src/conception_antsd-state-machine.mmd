@@ -27,7 +27,7 @@ flowchart TD
     bootstrap --> OPS
     joining --> stable_agent
     rejoin --> OPS
-    rejoin -->|"Rôle\nincohérent"| rejoin_failed
+    rejoin -->|"Rôle incohérent\nou délai dépassé"| rejoin_failed
 
     subgraph OPS["Opération"]
         stable_server(["stable_server"])

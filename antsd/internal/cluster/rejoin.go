@@ -14,9 +14,15 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster/antsd/internal/node"
 )
+
+// rejoinTimeout bounds the wait for the already-installed K3s to report ready again.
+//
+// It is generous because if the whole cluster is restarting, we wait on the rest of the cluster to come back too.
+const rejoinTimeout = 10 * time.Minute
 
 // startRejoin begins the rejoin workflow from the state left by a previous boot.
 func (m *Manager) startRejoin() {
@@ -37,14 +43,22 @@ func (m *Manager) startRejoin() {
 	m.transition(node.StateRejoinCluster)
 
 	m.startK3sOperation(func(ctx context.Context) error {
-		// No timeout here
+		// One timeout for the whole sequence
+		ctx, cancel := context.WithTimeout(ctx, m.rejoinTimeout)
+		defer cancel()
+
 		if err := m.checkInstalledRole(ctx, persisted.Role); err != nil {
 			return err
 		}
+
+		waitReady := m.installer.WaitAgentReady
 		if persisted.Role == node.RoleServer {
-			return m.installer.WaitServerReady(ctx)
+			waitReady = m.installer.WaitServerReady
 		}
-		return m.installer.WaitAgentReady(ctx)
+		if err := waitReady(ctx); err != nil {
+			return fmt.Errorf("k3s did not report ready within %s: %w", m.rejoinTimeout, err)
+		}
+		return nil
 	})
 }
 

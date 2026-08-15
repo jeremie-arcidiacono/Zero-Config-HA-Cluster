@@ -86,6 +86,8 @@ type Manager struct {
 	joinWaitDelay time.Duration
 	// forgetRetryInterval is the delay between two forget-me requests.
 	forgetRetryInterval time.Duration
+	// rejoinTimeout bounds the wait for the local K3s to report ready again after a reboot.
+	rejoinTimeout time.Duration
 	// evictionGrace is how long a machine must stay continuously Serf-failed before the
 	// rescaling workflow evicts it.
 	evictionGrace time.Duration
@@ -142,6 +144,7 @@ func newManager(
 		bootstrapWaitDelay:  bootstrapWaitDelay,
 		joinWaitDelay:       joinWaitDelay,
 		forgetRetryInterval: forgetRetryInterval,
+		rejoinTimeout:       rejoinTimeout,
 		evictionGrace:       conf.EvictionGrace,
 		rescaleSettleDelay:  conf.RescaleSettleDelay,
 	}
