@@ -18,8 +18,7 @@ import (
 	serflib "github.com/hashicorp/serf/serf"
 )
 
-// clusterName scopes the mDNS discovery so unrelated clusters on the
-// same LAN do not merge. // TODO : expose it in config ?
+// clusterName scopes the mDNS discovery so unrelated clusters on the same LAN do not merge.
 const clusterName = "antsd-cluster"
 
 // stateTagKey is the Serf tag carrying the node lifecycle state.
