@@ -44,6 +44,11 @@ const (
 	// Needed to avoid rescale_coordinating from holding the etcd mutex forever.
 	// Can be short because an abandoned round is retried.
 	rescaleCoordinationTimeout = 5 * time.Minute
+
+	// quorumProbeTimeout bounds the read-only call that checks the coordinator is still on the majority side
+	// during a split-brain situation.
+	// It's short because when the quorum is ok the answer is instant.
+	quorumProbeTimeout = 20 * time.Second
 )
 
 // eventRescaleConvert carries the coordinator's order to the machine that must change role.
@@ -69,6 +74,11 @@ type rescaleProgress struct {
 	// imbalanceControlPlaneSince is when the control plane was first seen off its target size, zero while it
 	// has the right one. Used for debounce.
 	imbalanceControlPlaneSince time.Time
+
+	// retryNotBefore holds back the round that follows an abandoned one.
+	// Without it a coordinator that keeps failing will loop: entering and leaving rescale_coordinating changes its
+	// own Serf tag, and that event can trigger the next evaluation.
+	retryNotBefore time.Time
 
 	// timer wakes the run loop at the next pending deadline.
 	timer *time.Timer
@@ -126,6 +136,7 @@ func (r *rescaleProgress) trackFailures(view clusterView, now time.Time) {
 func (r *rescaleProgress) forget() {
 	r.stopTimer()
 	r.imbalanceControlPlaneSince = time.Time{}
+	r.retryNotBefore = time.Time{}
 	r.order = rescaleOrder{}
 	r.evicting = nil
 	r.cleaning = ""
@@ -155,6 +166,9 @@ func (m *Manager) maybeRescale(view clusterView) {
 	if !view.isRescaleCoordinator(m.config.NodeName) {
 		m.rescale.forget()
 		return
+	}
+	if now.Before(m.rescale.retryNotBefore) {
+		return // A round was abandoned recently.
 	}
 
 	// Prevent multiple concurrent operations (double rescaling, rescaling + joining, ...)
@@ -203,8 +217,28 @@ func (m *Manager) startCoordinationRound(op func(ctx context.Context) error) {
 	m.startK3sOperation(func(ctx context.Context) error {
 		ctx, cancel := context.WithTimeout(ctx, rescaleCoordinationTimeout)
 		defer cancel()
+
+		if err := m.checkQuorum(ctx); err != nil {
+			return err
+		}
 		return op(ctx)
 	})
+}
+
+// checkQuorum verifies this node is still on the majority side of a split-brain situation, so it can safely evict or convert other machines.
+//
+// A machine isolated from the others is the only alive server of its own Serf view, so it elects
+// itself coordinator and would try to evict the machines that are the surviving majority.
+// kubectl doesn't answer read without quorum, so one read-only call tells on which side we are.
+func (m *Manager) checkQuorum(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, quorumProbeTimeout)
+	defer cancel()
+
+	// The name looked up does not matter, we just need to know if the cluster answers.
+	if _, err := m.controlPlane.NodeExists(ctx, m.config.NodeName); err != nil {
+		return fmt.Errorf("this node is not on the majority side of the cluster: %w", err)
+	}
+	return nil
 }
 
 // startEviction removes from the cluster the machines that have been gone for too long.
@@ -468,7 +502,8 @@ func (m *Manager) abandonCoordination(err error) {
 	// the failure detection should catch it.
 
 	now := time.Now()
-	m.scheduleRescaleCheck(now.Add(m.rescaleSettleDelay), now)
+	m.rescale.retryNotBefore = now.Add(m.rescaleSettleDelay)
+	m.scheduleRescaleCheck(m.rescale.retryNotBefore, now)
 }
 
 // failRescale logs the error and halts a node whose conversion failed.

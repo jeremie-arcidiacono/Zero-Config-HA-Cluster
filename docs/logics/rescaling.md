@@ -66,6 +66,17 @@ redevient `stable_server` et le prochain coordinateur refait le travail.
 Le délai est donc bien plus court que celle d'une installation.
 Elle est nécessaire parce que le coordinateur y appelle kubectl, qui pourrait rester bloqué.
 
+### Le coordinateur n'agit que si le quorum est ok
+
+L'élection est faite à partir de la vue Serf locale, qui est celle d'une seule machine.
+Dans le cas d'un isolement réseau d'une machine ou d'un split brain, plusieurs coordinateurs pourraient être élus.
+Pour éviter qu'un coordinateur illégitime effectue une action, on a un check qui repose sur l'api K3s.
+
+Chaque tour de coordination commence par un appel kubectl en lecture seule.
+etcd n'autorise pas de lecture si le quorum n'est pas ok, donc cet appel réussit du côté majoritaire et échoue du côté
+minoritaire :
+Un tour refusé est abandonné comme n'importe quel autre tour, et il est réessayé plus tard.
+
 ## Chorégraphie
 
 ```mermaid
