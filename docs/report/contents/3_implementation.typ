@@ -508,9 +508,11 @@ Le daemon prend alors un chemin très court, et surtout il ne réinstalle rien.
 K3s est un service systemd : il redémarre tout seul avec la machine et se reconnecte à ses pairs sans que antsd ait à intervenir.
 Le rôle de antsd se limite donc à vérifier que la situation est cohérente, puis à attendre.
 
-La vérification porte sur un seul point, mais il est important : le rôle inscrit dans le fichier d'état doit correspondre au rôle réellement installé sur la machine.
+La vérification porte sur deux points, et le premier est le plus important : le rôle inscrit dans le fichier d'état doit correspondre au rôle réellement installé sur la machine.
 Ce dernier n'est pas déduit ni supposé, il est lu sur le disque, car le script d'installation de K3s laisse derrière lui une unité systemd différente selon le rôle.
 Si les deux ne concordent pas, le daemon s'arrête dans un état d'échec.
+Le second point est le nom : celui indiqué dans le fichier d'état doit être celui que la machine porte actuellement.
+Un décalage est traité de la même manière qu'un rôle incohérent, car l'ancien nom pourrait toujours exister dans le cluster K3s.
 Une fois la vérification passée, il attend simplement que le K3s local se déclare disponible, avec la sonde qui correspond à son rôle, puis retrouve son état stable.
 
 Le point le plus important de ce chemin est ce qu'il s'interdit de faire.
