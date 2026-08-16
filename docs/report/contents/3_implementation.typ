@@ -334,6 +334,7 @@ Ce choix est motivé par des besoins de sureté.
 Une machine qui réessaie indéfiniment produit un cluster partiellement formé dont l'état oscille, ce qui est bien plus difficile à diagnostiquer qu'une machine clairement arrêtée sur une erreur.
 Comme l'état est publié dans les tags Serf, la panne devient de visible depuis n'importe quelle autre machine du cluster, et depuis l'interface de supervision.
 Nous privilégions donc un échec net et observable à une tentative de récupération automatique dont la logique resterait à concevoir.
+La reprise consiste alors à remettre la machine à zéro, ce qui n'est pas sans conséquence pour le cluster : nous y revenons dans la #ref(<section-implementation-forget-me>, supplement: [section]).
 
 == Rejoindre un cluster existant et redimensionnement <section-implementation-rescaling>
 
@@ -357,7 +358,7 @@ Une machine qui a déjà commencé un bootstrap avec ses semblables est elle aus
 Sans ce détournement, la machine de rang zéro refuserait correctement de continuer grâce à sa sécurité dédiée, mais toutes les autres atteindraient leur étape d'installation en voyant le serveur étranger dans les tags. Cependant, elles le rejoindraient avec un rôle calculé sur leur propre cohorte au lieu de celui qu'elles auraient dû obtenir si elles avaient pu observer l'ensemble du cluster.
 Cinq machines vierges branchées à côté d'un cluster sain lui auraient ainsi ajouté cinq serveurs, peu importe le besoin de la population.
 
-Ce détournement n'est pas la seule protection, et les trois qui existent répondent à des questions différentes qu'il ne faut pas confondre.
+Ce détournement n'est pas la seule protection contre la création d'un second cluster, et les trois qui répondent à ce risque posent des questions différentes qu'il ne faut pas confondre.
 Celle qui vient d'être décrite demande s'il existe un serveur joignable, c'est-à-dire un cluster capable d'accueillir la machine tout de suite.
 La deuxième s'oppose à l'utilisateur qui demande la création d'un cluster alors qu'une machine du réseau appartient déjà à un cluster, y compris lorsque celle-ci est en panne ou en cours de redémarrage.
 Un cluster qui se relève n'est en effet pas joignable, mais il existe bel et bien, et créer un second cluster à côté de lui serait une erreur.
@@ -389,6 +390,30 @@ antsd s'assure que le nom est conforme à cette forme.
 Autre point d'attention : l'adresse matérielle est lue sur une interface physique uniquement, reconnue à la présence d'un périphérique associé dans le système de fichiers du kernel ( `/sys/class/net/` ).
 C'est obligatoire, car une fois K3s démarré, la machine possède aussi des interfaces relatives aux conteneurs et au fonctionnement de Kubernetes.
 La machine pourrait donc alors changer d'identité à chaque redémarrage, ce qui causerait des incohérences.
+
+=== Protocole de gestion des machines réinitialisées <section-implementation-forget-me>
+
+Une machine dont le premier démarrage a échoué doit être remise à zéro avant d'être rebranchée, procédure sur laquelle nous revenons plus bas.
+
+Dans le cas où la machine n'est pas remise à zéro, elle sera simplement évincée par le coordinateur (présenté plus bas).
+Cependant, après une réinitialisation et une remise en route, l'éviction ne se déclanchera pas, puisqu'elle ne retire que les machines que Serf voit en panne, et que celle-ci est revenue et est bien vivante.
+
+Pour les raisons exposées dans la #ref(<part-conception-bootstrap>, supplement: [partie]) du #ref(<chapter-conception>), une machine réinitialisée ne peut pas rejoindre le cluster comme si de rien n'était.
+
+La correction consiste à faire nettoyer le cluster par la machine elle-même, au seul moment où c'est possible, c'est-à-dire à son retour et avant qu'elle n'installe quoi que ce soit.
+La machine vérifie d'abord localement qu'aucun K3s n'est installé chez elle.
+Elle diffuse ensuite une demande d'oubli portant son nom.
+Le coordinateur cherche un nœud K3s avec ce nom et le supprime s'il existe, puis diffuse une confirmation.
+La machine installe enfin son agent.
+
+Deux décisions de ce protocole sont intéressantes à commenter.
+
+La première est que l'attente de la confirmation n'est bornée par aucune échéance, et la machine réémet sa demande toutes les 15 secondes (les diffusions de Serf sont best-effort, et le coordinateur peut être occupé par une autre opération).
+Installer sans confirmation serait inutile : la machine échouerait à rejoindre le cluster, et demanderait à nouveau un reset, ce qui créerait un cycle sans fin.
+
+La deuxième concerne une vérification chez le coordinateur.
+Il n'honore une demande que si Serf voit la machine nommée vivante et en cours de premier démarrage.
+Cela évite qu'une requête perdu supprime un nœud K3s fonctionnel.
 
 === Nombre de serveurs dynamique
 

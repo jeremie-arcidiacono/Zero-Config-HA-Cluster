@@ -2,6 +2,8 @@
 config:
   flowchart:
     htmlLabels: false
+    nodeSpacing: 50
+    rankSpacing: 28
   htmlLabels: false
   theme: base
   themeVariables:
@@ -12,7 +14,8 @@ flowchart TD
     D -->|Nouveau membre| D
     D --> G{"Un serveur K3s\nest-il joignable ?"}
     G -->|Oui| H["Attente de stabilisation\ndu membership"]
-    H --> L["Installation de k3s agent\n(en parallèle)"]
+    H --> K["Demande d'oubli au\ncluster, puis attente\nde la confirmation"]
+    K --> L["Installation de k3s agent\n(en parallèle)"]
     G -->|Non| M{"Un nœud est-il déjà\nen bootstrap-waiting ?"}
     M -->|Oui| P[Passage en bootstrap-waiting]
     M -->|Non| N["Attente de la demande\nde création de l'utilisateur"]
@@ -27,7 +30,7 @@ flowchart TD
     classDef install fill:#C8E6C9,stroke:#1B5E20,color:#000
 
     class A depart
-    class B,C,D,H etape
+    class B,C,D,H,K etape
     class G,J,M decision
-    class K,L install
+    class L install
     class N,P,Q bootstrap

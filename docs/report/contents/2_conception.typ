@@ -77,6 +77,15 @@ Le bootstrapping est la phase qui donne sa forme initiale au cluster. C'est à c
 
 Lorsqu'une machine démarre pour la première fois, antsd lance Serf, attend que les autres nœuds deviennent visibles et observe si un cluster existe déjà. Si c'est le cas, la machine rejoint ce cluster et s'y installe en agent, sans jamais toucher aux machines déjà en place : décider de la taille du plan de contrôle revient aux machines qui voient le cluster en entier, et non à celle qui arrive. Sinon, la machine se tient prête à participer à la création d'un premier cluster.
 
+Une machine qui rejoint ne se contente pas de s'installer.
+Elle demande d'abord au cluster d'oublier ce qu'il sait éventuellement d'elle, puis attend la confirmation avant d'installer quoi que ce soit.
+Cette précaution répond à une contrainte du produit : la remise à zéro d'une machine ANTS est un bouton physique, piloté par un firmware qui ne connaît ni antsd ni le cluster.
+Cette contrainte est nécessaire car en cas de défaillance logiciel majeure (crash de antsd, problème linux, etc...), cette option est l'unique manière de récupérer la machine, et se doit donc d'être disponible dans tous les cas.
+Ce reset efface donc le disque local, mais ne peut pas prévenir les autres machines.
+Le cluster garde alors une trace de la machine (dans K3s), et comme le nom de celle-ci est stable (il est dérivé de son adresse MAC), elle revient exactement avec le même nom.
+Lors de sa tentative de rejoindre le cluster, elle est donc vue comme une machine déjà connue, et K3s refuse de l'installer à nouveau.
+Les détails de ce mécanisme sont décrits dans la #ref(<section-implementation-forget-me>, supplement: [section]) du #ref(<chapter-implementation>).
+
 La #ref(<fig_conception_bootstrap-discovery>) illustre cette première phase de décision. Elle montre comment la machine démarre, observe le réseau local, puis choisit entre rejoindre un cluster déjà formé ou participer au bootstrap initial.
 
 #hepia.sourced_figure(
