@@ -54,8 +54,9 @@ Les dépendances du programme sont ainsi toutes dirigées vers ce noyau commun, 
 // )
 
 La configuration suit la même volonté de simplicité.
-Tous les paramètres de fonctionnement, comme le nom du nœud, le port de Serf ou le chemin du fichier d'état, sont lus au démarrage, à partir des arguments de la ligne de commande ou, à défaut, des variables d'environnement.
+Tous les paramètres de fonctionnement, comme le port de Serf, le port du serveur HTTP ou le chemin du fichier d'état, sont lus au démarrage, à partir des arguments de la ligne de commande ou, à défaut, des variables d'environnement.
 La configuration est validée au début, afin de détecter immédiatement toute incohérence et éviter que le programme démarre dans un état incorrect.
+Le nom de la machine n'est pas choisi par l'utilisateur mais dérivé du matériel, pour les raisons exposées dans la #ref(<section-implementation-node-naming>, supplement: [section]).
 
 == Encapsulation de Serf et découverte des nœuds <section-implementation-serf>
 
@@ -373,6 +374,21 @@ La machine comptait donc un serveur de moins qu'il n'y en a, revendiquait l'empl
 Cela pouvait créer un deadlock.
 
 La conclusion retenue est que dimensionner le plan de contrôle appartient aux machines qui voient le cluster en entier, jamais à celle qui arrive : le joining installe désormais toujours un agent, que le redimensionnement promeut ensuite si la population le demande.
+
+=== Nom d'une machine <section-implementation-node-naming>
+
+Tous les mécanismes qui suivent désignent des machines par leur nom, il faut donc d'abord dire ce qu'est ce nom.
+
+antsd dérive automatiquement son nom, à partir des trois derniers octets de l'adresse MAC de la carte réseau de la machine, ce qui donne par exemple `ants-669eae`.
+Le nom peut toute fois être remplacé par l'utilisateur, mais il est conseillé de ne pas le modifier manuellement pour éviter les collisions.
+Ce nom est transmis à K3s lors de l'installation, afin que le nœud Kubernetes porte exactement le même.
+
+Kubernetes impose une forme précise, celle des labels définies par la RFC 1123 /*TODO REF*/.
+antsd s'assure que le nom est conforme à cette forme.
+
+Autre point d'attention : l'adresse matérielle est lue sur une interface physique uniquement, reconnue à la présence d'un périphérique associé dans le système de fichiers du kernel ( `/sys/class/net/` ).
+C'est obligatoire, car une fois K3s démarré, la machine possède aussi des interfaces relatives aux conteneurs et au fonctionnement de Kubernetes.
+La machine pourrait donc alors changer d'identité à chaque redémarrage, ce qui causerait des incohérences.
 
 === Nombre de serveurs dynamique
 
