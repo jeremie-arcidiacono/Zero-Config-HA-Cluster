@@ -206,9 +206,9 @@ control plane.
 de choisir la cible du join. La décision est réévaluée à chaque événement Serf.
 Une machine qui ne voit plus aucun server joignable attend, elle ne retombe jamais sur le bootstrapping.
 
-Les agents ne touchent pas au membership etcd, donc les machines qui arrivent s'installent en parallèle, sans prendre le
-mutex `isEtcdMembershipChanging()`. La seule exception est le protocole ci-dessous, et uniquement pour une machine qui
-a réellement des restes à effacer.
+Les agents ne touchent pas au membership etcd, donc les machines qui arrivent s'installent en parallèle, sans attendre
+sur `isEtcdMembershipChanging()`.
+La seule exception est le protocole ci-dessous, et uniquement pour une machine qui a réellement des restes à effacer.
 
 ### Protocole forget-me
 
@@ -262,8 +262,8 @@ Ce mécanisme a été retiré après un test sur les raspberry, pour deux raison
 
 2. etcd refuse de grossir pendant qu'un de ses membres est injoignable. C'est le `strict-reconfig-check` d'etcd . La
    règle est la même que celle du rescaling (éviction avant promotion) : il faut retirer le membre mort
-   avant d'en ajouter un. Or `fb_joining_server` faisait partie du mutex etcd, donc la machine bloquée y retenait
-   justement le mutex dont l'éviction du membre mort avait besoin : deadlock.
+   avant d'en ajouter un. Or `fb_joining_server` faisait partie des états qui bloquent les changements de membership
+   etcd, donc la machine bloquée bloquait justement l'éviction du membre mort dont elle avait besoin : deadlock.
 
 Faire décider le coordinateur (un `stable_server` qui voit tout le cluster) supprime le problème.
 Le coût est un cycle d'installation supplémentaire pour une machine destinée à devenir server : agent d'abord,

@@ -56,10 +56,15 @@ fraîchement stabilisé.
 Grâce à `isEtcdMembershipChanging()`, on s'assure qu'aucun autre membre n'est en train de faire une action qui rend
 etcd indisponible pour un changement de role (qui implique une suppression ou ajout de membre etcd).
 
-Attention avec ce mutex : tout état qui le prend doit avoir une durée bornée.
-Le test du mutex précède le rescaling, donc une machine immobilisée dans un de ces états gèle toutes les
+C'est une protection best-effort, pas un mutex : lire/modifier les tags Serf n'est pas atomique.
+Ce qui rend un changement concurrent sûr c'est etcd, pas ce GUARD, qui sert à éviter le travail redondant, les délais,
+etc.
+
+Attention : tout état qui déclenche le GUARD doit avoir une durée bornée.
+Le test précède le rescaling, donc une machine immobilisée dans un de ces états gèle toutes les
 réparations du cluster (y compris celle qui la débloquerait).
-Les installations, les conversions et le redémarrage sont bornés et tombent dans un état terminal qui libère le mutex.
+Les installations, les conversions et le redémarrage sont bornés et tombent dans un état terminal qui ne bloque plus
+rien.
 
 `rescale_coordinating` à un timeout, mais son expiration n'est pas terminale : le tour est abandonné, la machine
 redevient `stable_server` et le prochain coordinateur refait le travail.
@@ -168,7 +173,7 @@ L'image ants-os a donc une copie intacte dans `/usr/lib/ants/k3s/`, un emplaceme
 
 1. **Une machine évincée qui revient est un zombie.** Elle rejoint Serf en `alive`, mais son K3s ne peut pas rejoindre
    un cluster etcd dont il a été retiré. Elle ne bloque pas le reste du système : `rejoinTimeout`
-   la fait tomber en `rejoin_failed`, qui ne prend pas le mutex. La machine elle-même reste perdue et sa
+   la fait tomber en `rejoin_failed`, qui ne bloque plus rien. La machine elle-même reste perdue et sa
    récupération passe par une réinitialisation d'usine.
 2. **Fenêtre de crash entre la réinstallation et la persistance.** Un crash après une conversion réussie mais avant
    l'écriture du fichier d'état laisse disque = server et état persisté = agent, donc `rejoin_failed` au redémarrage.

@@ -17,8 +17,8 @@ package cluster
 //
 // Eviction comes first, to avoid having leftover in the etcd membership that may still count in the quorum.
 //
-// The cluster-wide mutex is isEtcdMembershipChanging() to avoid multiple
-// operation (joining, rescaling, ...) at the same time.
+// isEtcdMembershipChanging() keeps two etcd membership changes (joining, rescaling, ...) from
+// running at the same time.
 // Every coordinator step is idempotent: it can die mid-repair, and the next coordinator will redo the work.
 //
 // The workflow also reacts to the forget-me protocol request.
@@ -41,7 +41,7 @@ const (
 	rescaleConvertTimeout = 10 * time.Minute
 
 	// rescaleCoordinationTimeout bounds a whole coordination round.
-	// Needed to avoid rescale_coordinating from holding the etcd mutex forever.
+	// Needed to avoid rescale_coordinating from blocking etcd membership change forever.
 	// Can be short because an abandoned round is retried.
 	rescaleCoordinationTimeout = 5 * time.Minute
 

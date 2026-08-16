@@ -257,6 +257,15 @@ func isNodeAK3sServer(state node.State) bool {
 //
 // rejoin_cluster is included although a restarting node adds no member: it may be
 // a server reconnecting to the quorum, and adding one meanwhile is risky.
+//
+// This is an advisory best-effort serialization check, not a mutex.
+// Two reasons:
+//  1. reading/changing Serf tag is not atomic, since tag takes a gossip round to reach other nodes.
+//  2. Due to the best-effort nature, what keeps a concurrent change safe is etcd/k3s.
+//     So if this check fails, it can cause redundant work or unnecessary delays, but the cluster should always survive.
+//
+// A member that stalls in one of these states blocks the coordinator.
+// So those states must have a deadline/timeout.
 func isNodeChangingEtcdMembership(state node.State) bool {
 	switch state {
 	case node.StateBootstrapInstallInit,

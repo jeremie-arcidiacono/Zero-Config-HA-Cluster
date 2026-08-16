@@ -16,7 +16,7 @@ import (
 // for it to report ready.
 //
 // It is generous: expiring here put a terminal state (a factory reset is the only way out).
-// The bound exists to guarantee the node stops holding the etcd mutex.
+// The bound exists to guarantee the node stops blocking every other etcd membership change.
 const firstBootTimeout = 10 * time.Minute
 
 // ensureK3sIsNotInstalled refuses a first-boot installation on a node that already runs K3s.

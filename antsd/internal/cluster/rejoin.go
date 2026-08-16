@@ -22,6 +22,7 @@ import (
 // rejoinTimeout bounds the wait for the already-installed K3s to report ready again.
 //
 // It is generous because if the whole cluster is restarting, we wait on the rest of the cluster to come back too.
+// The bound exists so a machine that never comes back stops blocking every other etcd membership change.
 const rejoinTimeout = 10 * time.Minute
 
 // startRejoin begins the rejoin workflow from the state left by a previous boot.
