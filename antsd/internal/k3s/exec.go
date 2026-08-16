@@ -152,7 +152,7 @@ func (i *ExecInstaller) runUninstallScript(ctx context.Context, role node.Role) 
 	output, err := exec.CommandContext(ctx, script).CombinedOutput()
 	if err != nil {
 		i.logger.Warn("k3s uninstall script reported a failure",
-			"role", role, "error", err, "output", tail(output))
+			"role", role, "error", err, "output", truncate(output))
 		return ctx.Err() // A canceled antsd must stop here rather than reinstall.
 	}
 
@@ -276,7 +276,7 @@ func (i *ExecInstaller) runInstallScript(ctx context.Context, extraEnv []string)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("k3s install script failed: %w (output: %s)", err, tail(output))
+		return fmt.Errorf("k3s install script failed: %w (output: %s)", err, truncate(output))
 	}
 
 	i.logger.Debug("k3s install script completed", "output", string(output))
@@ -289,7 +289,7 @@ func (i *ExecInstaller) WaitServerReady(ctx context.Context) error {
 	return i.pollUntilReady(ctx, "server", func(ctx context.Context) error {
 		probe := exec.CommandContext(ctx, i.binPath, "kubectl", "get", "--raw=/readyz")
 		if output, err := probe.CombinedOutput(); err != nil {
-			return fmt.Errorf("%w (output: %s)", err, tail(output))
+			return fmt.Errorf("%w (output: %s)", err, truncate(output))
 		}
 		return nil
 	})
@@ -310,7 +310,7 @@ func (i *ExecInstaller) WaitAgentReady(ctx context.Context) error {
 
 		output, err := probe.CombinedOutput()
 		if err != nil {
-			return fmt.Errorf("%w (output: %s)", err, tail(output))
+			return fmt.Errorf("%w (output: %s)", err, truncate(output))
 		}
 		if condition := strings.TrimSpace(string(output)); condition != "True" {
 			return fmt.Errorf("node %q is not Ready yet (condition: %q)", i.nodeName, condition)
@@ -395,13 +395,15 @@ func (i *ExecInstaller) pollUntilReady(ctx context.Context, role string, probe f
 	}
 }
 
-// tail returns the last part of a command output.
+// truncate shortens a command output by keeping the start and the end, and replacing the middle with "[...]".
 // Used to keep error messages short.
-func tail(output []byte) string {
+func truncate(output []byte) string {
 	const maxLen = 1024
 	output = bytes.TrimSpace(output)
-	if len(output) > maxLen {
-		output = output[len(output)-maxLen:]
+	if len(output) <= maxLen {
+		return string(output)
 	}
-	return string(output)
+
+	half := maxLen / 2
+	return string(output[:half]) + "\n[...]\n" + string(output[len(output)-half:])
 }

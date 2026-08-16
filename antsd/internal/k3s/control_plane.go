@@ -90,7 +90,7 @@ func (a *ExecControlPlane) kubectl(ctx context.Context, args ...string) (string,
 
 	output, err := exec.CommandContext(ctx, a.binPath, full...).CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("kubectl %s: %w (output: %s)", strings.Join(args, " "), err, tail(output))
+		return "", fmt.Errorf("kubectl %s: %w (output: %s)", strings.Join(args, " "), err, truncate(output))
 	}
 
 	a.logger.Debug("kubectl completed", "args", args, "output", string(output))
