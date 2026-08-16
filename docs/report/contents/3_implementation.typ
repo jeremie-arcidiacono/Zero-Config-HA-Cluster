@@ -405,13 +405,25 @@ Le procédé est le même que pour l'élection de rôle du bootstrap, et il en t
 Si ce coordinateur disparaît en cours de réparation, la machine suivante reprend le tour et refait le travail depuis une observation fraîche, ce qui suppose que chacune de ses étapes soit reproductible sans effet supplémentaire (idempotent).
 
 Il n'existe volontairement aucun verrou propre au redimensionnement.
-L'exclusion mutuelle est assurée par le mécanisme qui existe déjà pour sérialiser les ajouts de serveurs.
-Le redimensionnement, le bootstrap et la reprise après redémarrage se sérialisent donc les uns par rapport aux autres sans mécanisme supplémentaire, ce qui est exactement la propriété recherchée : la base de données interne de K3s n'admet qu'un changement de membres à la fois.
+La sérialisation est assurée par le mécanisme qui existe déjà pour les ajouts de serveurs : chaque machine publie son état dans son tag Serf, et le coordinateur s'abstient tant qu'une autre annonce une opération modifiant à la composition de la base de données interne de K3s.
+Le redimensionnement, le bootstrap et la reprise après redémarrage se sérialisent donc les uns par rapport aux autres sans mécanisme supplémentaire, ce qui est exactement la propriété recherchée : cette base n'admet qu'un changement de membres à la fois.
 
-Cette exclusion mutuelle n'offre en revanche aucune garantie de vivacité, et c'est la contrainte qu'elle impose au reste du système : tout état qui la prend doit avoir une durée bornée.
+Cette protection n'offre en revanche aucune garantie de vivacité, et c'est la contrainte qu'elle impose au reste du système : tout état qui la déclenche doit avoir une durée bornée.
 Une machine qui s'y immobilise gèle en effet toutes les réparations du cluster, y compris celle qui la débloquerait.
 Les installations et les conversions sont donc soumises à une échéance, qui couvre le script d'installation autant que l'attente de disponibilité qui le suit, pour la raison détaillée dans la #ref(<section-implementation-k3s>, supplement: [section]).
-// Une seule étape échappe aujourd'hui à cette règle, la reprise après redémarrage, et nous en assumons la conséquence dans la #ref(<section-implementation-rejoin>, supplement: [section]).
+
+=== Protection best-effort <section-implementation-advisory>
+
+Expliquer pourquoi cette sérialisation est une protection best-effort est important, car elle ressemble à un verrou sans en être un.
+Lire les tags des autres machines puis modifer le siens ne constitue pas une opération atomique : le nouveux tag met du temps à parvenir aux autres, si bien que deux machines peuvent décider d'agir après s'être mutuellement lues inactives.
+
+Ce qui rend un changement concurrent sûr n'est donc pas cette garde, mais la base de données etcd elle-même.
+Ses reconfigurations et modification sont déjà protégés contre les actions dangereuses /* ef @etcd_runtime_2026 ?*/.
+Une opération impossible reçoit donc une erreur plutôt que de corrompre le cluster.
+Le coordinateur abandonne, et retentera plus tard, avec une observation plus récente.
+
+La protection conserve une utilité : elle évite le travail redondant et les éventuelles opérations redondantes.
+Ainsi, on évite des conversions inutiles par exemple.
 
 === Eviction des machines mortes
 
