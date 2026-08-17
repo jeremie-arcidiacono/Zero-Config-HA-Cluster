@@ -13,7 +13,7 @@
     supplement: chapter_supplement,
   )
   show heading.where(level: 2): set heading(numbering: "1.1.")
-  show heading.where(level: 3): set heading(numbering: (..numbers, last) => numbering("a)", last))
+  show heading.where(level: 3): set heading(numbering: "1.1.1.")
 
   body
 }

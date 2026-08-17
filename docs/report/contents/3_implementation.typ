@@ -63,7 +63,7 @@ Les trois paquets en vert n'ont aucune flèche sortante, ce qui traduit exacteme
 La configuration suit la même volonté de simplicité.
 Tous les paramètres de fonctionnement, comme le port de Serf, le port du serveur HTTP ou le chemin du fichier d'état, sont lus au démarrage, à partir des arguments de la ligne de commande ou, à défaut, des variables d'environnement.
 La configuration est validée au début, afin de détecter immédiatement toute incohérence et éviter que le programme démarre dans un état incorrect.
-Le nom de la machine n'est pas choisi par l'utilisateur mais dérivé du matériel, pour les raisons exposées dans la #ref(<section-implementation-node-naming>, supplement: [section]).
+Le nom de la machine n'est pas choisi par l'utilisateur mais dérivé du matériel, pour les raisons exposées dans la #ref(<part-implementation-node-naming>, supplement: [partie]).
 
 == Encapsulation de Serf et découverte des nœuds <section-implementation-serf>
 
@@ -346,7 +346,7 @@ Ce choix est motivé par des besoins de sureté.
 Une machine qui réessaie indéfiniment produit un cluster partiellement formé dont l'état oscille, ce qui est bien plus difficile à diagnostiquer qu'une machine clairement arrêtée sur une erreur.
 Comme l'état est publié dans les tags Serf, la panne devient de visible depuis n'importe quelle autre machine du cluster, et depuis l'interface de supervision.
 Nous privilégions donc un échec net et observable à une tentative de récupération automatique dont la logique resterait à concevoir.
-La reprise consiste alors à remettre la machine à zéro, ce qui n'est pas sans conséquence pour le cluster : nous y revenons dans la #ref(<section-implementation-forget-me>, supplement: [section]).
+La reprise consiste alors à remettre la machine à zéro, ce qui n'est pas sans conséquence pour le cluster : nous y revenons dans la #ref(<part-implementation-forget-me>, supplement: [partie]).
 
 == Rejoindre un cluster existant et redimensionnement <section-implementation-rescaling>
 
@@ -388,7 +388,7 @@ Cela pouvait créer un deadlock.
 
 La conclusion retenue est que dimensionner le plan de contrôle appartient aux machines qui voient le cluster en entier, jamais à celle qui arrive : le joining installe désormais toujours un agent, que le redimensionnement promeut ensuite si la population le demande.
 
-=== Nom d'une machine <section-implementation-node-naming>
+=== Nom d'une machine <part-implementation-node-naming>
 
 Tous les mécanismes qui suivent désignent des machines par leur nom, il faut donc d'abord dire ce qu'est ce nom.
 
@@ -403,14 +403,14 @@ Autre point d'attention : l'adresse matérielle est lue sur une interface physiq
 C'est obligatoire, car une fois K3s démarré, la machine possède aussi des interfaces relatives aux conteneurs et au fonctionnement de Kubernetes.
 La machine pourrait donc alors changer d'identité à chaque redémarrage, ce qui causerait des incohérences.
 
-=== Protocole de gestion des machines réinitialisées <section-implementation-forget-me>
+=== Protocole de gestion des machines réinitialisées <part-implementation-forget-me>
 
 Une machine dont le premier démarrage a échoué doit être remise à zéro avant d'être rebranchée, procédure sur laquelle nous revenons plus bas.
 
 Dans le cas où la machine n'est pas remise à zéro, elle sera simplement évincée par le coordinateur (présenté plus bas).
 Cependant, après une réinitialisation et une remise en route, l'éviction ne se déclanchera pas, puisqu'elle ne retire que les machines que Serf voit en panne, et que celle-ci est revenue et est bien vivante.
 
-Pour les raisons exposées dans la #ref(<part-conception-bootstrap>, supplement: [partie]) du #ref(<chapter-conception>), une machine réinitialisée ne peut pas rejoindre le cluster comme si de rien n'était.
+Pour les raisons exposées dans la #ref(<part-conception-bootstrap>, supplement: [partie]), une machine réinitialisée ne peut pas rejoindre le cluster comme si de rien n'était.
 
 La correction consiste à confier ce nettoyage à la machine elle-même, au seul moment où c'est possible, c'est-à-dire à son retour et avant qu'elle n'installe quoi que ce soit (#src("antsd/internal/cluster/forget.go")).
 La machine vérifie d'abord localement qu'aucun K3s n'est installé chez elle.
@@ -456,7 +456,7 @@ Cette protection n'offre en revanche aucune garantie de vivacité, et c'est la c
 Une machine qui s'y immobilise gèle en effet toutes les réparations du cluster, y compris celle qui la débloquerait.
 Les installations et les conversions sont donc soumises à une échéance, qui couvre le script d'installation autant que l'attente de disponibilité qui le suit, pour la raison détaillée dans la #ref(<section-implementation-k3s>, supplement: [section]).
 
-=== Protection best-effort <section-implementation-advisory>
+=== Protection best-effort <part-implementation-advisory>
 
 Expliquer pourquoi cette sérialisation est une protection best-effort est important, car elle ressemble à un verrou sans en être un.
 Lire les tags des autres machines puis modifer le siens ne constitue pas une opération atomique : le nouveux tag met du temps à parvenir aux autres, si bien que deux machines peuvent décider d'agir après s'être mutuellement lues inactives.

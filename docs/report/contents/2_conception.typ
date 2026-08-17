@@ -94,7 +94,7 @@ Cette contrainte est nécessaire car en cas de défaillance logiciel majeure (cr
 Ce reset efface donc le disque local, mais ne peut pas prévenir les autres machines.
 Le cluster garde alors une trace de la machine (dans K3s), et comme le nom de celle-ci est stable (il est dérivé de son adresse MAC), elle revient exactement avec le même nom.
 Lors de sa tentative de rejoindre le cluster, elle est donc vue comme une machine déjà connue, et K3s refuse de l'installer à nouveau.
-Les détails de ce mécanisme sont décrits dans la #ref(<section-implementation-forget-me>, supplement: [section]) du #ref(<chapter-implementation>).
+Les détails de ce mécanisme sont décrits dans la #ref(<part-implementation-forget-me>, supplement: [partie]).
 
 La #ref(<fig_conception_bootstrap-discovery>) illustre cette première phase de décision. Elle montre comment la machine démarre, observe le réseau local, puis choisit entre rejoindre un cluster déjà formé ou participer au bootstrap initial.
 
@@ -145,7 +145,7 @@ Le comportement de antsd tout au long du cycle de vie de la machine est représe
   image("../assets/diagrams/conception_antsd-state-machine.svg"),
 )
 
-Le premier choix distingue un démarrage initial d'un redémarrage connu. Lors d'un premier démarrage, antsd doit déterminer si la machine crée un nouveau cluster ou rejoint un cluster déjà en place. Cette logique, dite de bootstrap, est détaillée dans la #ref(<part-conception-bootstrap>, supplement: "partie") de la #ref(<section-conception-antsd>, supplement: [section]).
+Le premier choix distingue un démarrage initial d'un redémarrage connu. Lors d'un premier démarrage, antsd doit déterminer si la machine crée un nouveau cluster ou rejoint un cluster déjà en place. Cette logique, dite de bootstrap, est détaillée dans la #ref(<part-conception-bootstrap>, supplement: "partie").
 Lors d'un redémarrage, la présence d'un état local persisté permet au daemon de retrouver rapidement sa place dans le système sans repartir de zéro. Il se contente alors de vérifier que le rôle installé sur la machine correspond à celui qu'il avait enregistré, puis d'attendre que K3s soit de nouveau prêt. Il ne réinstalle rien.
 Si cet état est illisible, ou incohérent avec l'installation K3s trouvée sur la machine, antsd s'arrête dans un état d'échec plutôt que de retomber sur un premier démarrage : celui-ci réinstallerait K3s par-dessus des données existantes.
 
