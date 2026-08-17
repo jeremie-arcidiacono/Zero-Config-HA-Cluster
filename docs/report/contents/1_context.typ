@@ -98,7 +98,7 @@ Une charge applicative qui s'échappe de son conteneur peut donc théoriquement 
 Nous acceptons malgré tout ces inconvénients, car l'alternative est trop coûteuse dans notre contexte.
 Le produit vendu par ANTS A.I. Systems est destiné à des clients qui n'acquièrent que quelques machines.
 En réserver au moins trois à la seule gestion du cluster reviendrait à en soustraire une part considérable.
-Kubernetes fournit par ailleurs l'option nécessaire si ce choix devait être revu plus tard, sous la forme d'un paramètre qui empêchent l'ordonnanceur de placer des charges ordinaires sur les nœuds Server/*@kubernetes_taints*/.
+Kubernetes fournit par ailleurs l'option nécessaire si ce choix devait être revu plus tard, sous la forme d'un paramètre qui empêchent l'ordonnanceur de placer des charges ordinaires sur les nœuds Server@kubernetes_taints_2026.
 
 Dans la suite de ce document, nous utiliserons la terminologie de K3s plutôt que celle de Kubernetes.
 

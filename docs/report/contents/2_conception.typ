@@ -28,7 +28,7 @@
 == ants-os <section-conception-ants-os>
 
 La base du système est une image ARM64 prête à l'emploi.
-Pour le PoC, elle cible des Raspberry Pi 5/*@raspberry_pi_5*/, ce qui permet de tester la solution sur une plateforme simple et peu coûteuse, tout en restant proche des machines réelles de ANTS A.I. Systems, construites autour d'un module Nvidia Jetson Orin Nano/*@nvidia_jetson_orin_*/.
+Pour le PoC, elle cible des Raspberry Pi 5@ltd_buy_2026, ce qui permet de tester la solution sur une plateforme simple et peu coûteuse, tout en restant proche des machines réelles de ANTS A.I. Systems, construites autour d'un module Nvidia Jetson Orin Nano@nvidia_corporation_kit_2026.
 Les deux plateformes partagent l'architecture ARM64 ainsi qu'un ordre de grandeur comparable de mémoire.
 La machine ANTS dispose en plus d'une puce destinée aux charges d'intelligence artificielle, que le Raspberry Pi n'a pas, mais celui-ci ne joue aucun rôle dans ce travail.
 La différence qui compte ici est le stockage : la machine ANTS embarque des disques NVMe, là où le Raspberry Pi démarre sur une carte mémoire nettement plus lente.
@@ -48,7 +48,7 @@ Cette image est construite à l'avance avec HashiCorp Packer@hashicorp_hashicorp
 Elle contient le binaire K3s complet, les images de conteneurs requises pour fonctionner hors ligne, le binaire antsd avec sa configuration, ainsi qu'un service systemd qui lance automatiquement le daemon au démarrage.
 Les outils de base restent aussi présents pour simplifier le diagnostic lors de la phase de développement.
 
-Le choix de Packer plutôt que d'autres outils tel que `rpi-image-gen`/*@raspberrypi_rpi_image_gen*/ est motivé par sa capacité à créer des images pour différentes plateformes et architectures.
+Le choix de Packer plutôt que d'autres outils tel que `rpi-image-gen`@raspberrypi_raspberrypirpi-image-gen_2026 est motivé par sa capacité à créer des images pour différentes plateformes et architectures.
 
 En pratique, ants-os n'implémente aucune logique de cluster. Il prépare simplement une machine propre, stable et identique aux autres, pour que antsd et K3s puissent démarrer de manière fiable.
 
@@ -115,7 +115,7 @@ Une fois la confirmation reçue, toutes les machines en premier démarrage passe
 
 Le nombre de servers à former découle d'une contrainte de la base de données interne de K3s.
 Celle-ci fonctionne par consensus, ce qui suppose qu'une majorité de servers reste joignable pour que le cluster soit pilotable @k3s_high_2026.
-Ce nombre doit donc rester impair, et ne pas dépasser sept @etcd_etcd_nodate.
+Ce nombre doit donc rester impair, et ne pas dépasser sept @etcd_etcd_2024.
 Trois servers constituent le plancher de la haute disponibilité, c'est à dire le plus petit nombre qui permette au cluster de survivre à la perte d'une machine.
 Un cluster peut compter moins de machines que cela, et le système doit alors fonctionner quand même, avec un seul server et sans haute disponibilité.
 Les machines dont la position tombe dans ce quota deviennent servers, les autres deviennent agents.

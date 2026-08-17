@@ -17,7 +17,7 @@ La manière dont tout ceci est vérifié, ainsi que les essais menés sur les ma
 
 Avant de détailler le fonctionnement interne du daemon, il convient de justifier le choix du langage de programmation, puis de présenter la manière dont le code est découpé.
 
-Le langage Go/*@golang_documentation_2026*/ s'impose assez naturellement pour ce projet et ce pour plusieurs raisons.
+Le langage Go@go_go_2026 s'impose assez naturellement pour ce projet et ce pour plusieurs raisons.
 La première tient à la nature du livrable : la compilation produit un binaire unique, lié statiquement, qui ne dépend d'aucune bibliothèque présente sur la machine cible.
 Ce binaire se dépose tel quel dans l'image système, sans gestionnaire de paquets ni environnement d'exécution à installer, ce qui correspond exactement à notre contrainte de fonctionnement hors ligne.
 La deuxième raison est plus structurelle.
@@ -98,7 +98,7 @@ Des tests avaient montré que cette fonctionnalité fonctionnait correctement, m
 Or, la fonctionnalité mDNS de Serf n'existe en réalité pas dans le coeur de la librairie, mais dans le paquet annexe qui est propre à l'outil en ligne de commande.
 Cet imprévu nous oblige donc à réimplémenter la découverte mDNS dans notre code.
 
-C'est le rôle du paquet #pkg("discovery") (#src("antsd/internal/discovery/mdns.go")), qui s'appuie sur la bibliothèque mDNS de HashiCorp/*@hashicorp_mdns*/.
+C'est le rôle du paquet #pkg("discovery") (#src("antsd/internal/discovery/mdns.go")), qui s'appuie sur la bibliothèque mDNS de HashiCorp@hashicorp_hashicorpmdns_2026.
 Puisque Serf utilise lui-même cette bibliothèque dans sa version standalone en ligne de commande, nous nous inspirons de son code pour construire notre propre implémentation.
 Chaque machine se tient prête à annoncer sa présence sur le réseau local (elle écoute les requêtes entrantes) et interroge périodiquement ce dernier (elle envoie des requêtes), toutes les cinq secondes, à la recherche d'autres machines qui écoutent.
 Lorsqu'une nouvelle adresse apparaît, elle est transmise à `serfnode`, qui demande alors à Serf de rejoindre ce pair.
@@ -282,7 +282,7 @@ Elle ne sert pas à négocier, mais à laisser à la vue des membres le temps de
 
 Le nombre de serveurs visé est calculé par la fonction `DesiredServerCount`, qui renvoie le plus grand nombre impair inférieur ou égal à la population, plafonné à sept.
 Une population de une ou deux machines appelle donc un seul serveur, trois ou quatre en appellent trois, cinq ou six en appellent cinq, et au-delà de sept la cible ne bouge plus.
-Trois est le plancher de la haute disponibilité, c'est-à-dire le plus petit nombre de membres permettant à la base de données interne de K3s de conserver un quorum malgré la perte d'une machine. Sept en est le plafond recommandé, au-delà duquel le coût de la performance (à cause de la réplication des données) dépasse le gain de résilience@etcd_etcd_nodate.
+Trois est le plancher de la haute disponibilité, c'est-à-dire le plus petit nombre de membres permettant à la base de données interne de K3s de conserver un quorum malgré la perte d'une machine. Sept en est le plafond recommandé, au-delà duquel le coût de la performance (à cause de la réplication des données) dépasse le gain de résilience@etcd_etcd_2024.
 La justification de la parité, ainsi que le mécanisme qui maintient cette cible au cours de la vie du cluster, sont présentés dans la #ref(<section-implementation-rescaling>, supplement: [section]).
 
 === Tolérance aux doublons et au désordre
@@ -396,7 +396,7 @@ antsd dérive automatiquement son nom à partir des trois derniers octets de l'a
 Le nom peut toute fois être remplacé par l'utilisateur, mais il est conseillé de ne pas le modifier manuellement pour éviter les collisions.
 Ce nom est transmis à K3s lors de l'installation, afin que le nœud Kubernetes porte exactement le même.
 
-Kubernetes impose une forme précise, celle des labels définis par la RFC 1123/*@kubernetes_object_names*/.
+Kubernetes impose une forme précise, celle des labels définis par la RFC 1123@kubernetes_object_2026.
 antsd s'assure que le nom est conforme à cette forme.
 
 Autre point d'attention : l'adresse matérielle est lue sur une interface physique uniquement, reconnue à la présence d'un périphérique associé dans le système de fichiers du kernel ( `/sys/class/net/` ).
@@ -462,7 +462,7 @@ Expliquer pourquoi cette sérialisation est une protection best-effort est impor
 Lire les tags des autres machines puis modifer le siens ne constitue pas une opération atomique : le nouveux tag met du temps à parvenir aux autres, si bien que deux machines peuvent décider d'agir après s'être mutuellement lues inactives.
 
 Ce qui rend un changement concurrent sûr n'est donc pas cette garde, mais la base de données etcd elle-même.
-Ses reconfigurations sont déjà protégées contre les opérations dangereuses/*@etcd_runtime_2026*/.
+Ses reconfigurations sont déjà protégées contre les opérations dangereuses@etcd_runtime_2025.
 Une opération impossible reçoit donc une erreur plutôt que de corrompre le cluster.
 Le coordinateur abandonne, et retentera plus tard, avec une observation plus récente.
 
@@ -712,11 +712,11 @@ Ils tiennent lieu des boutons de l'écran physique prévu sur les machines ANTS,
 Le chapitre précédent a exposé les raisons qui nous conduisent à préparer une image système complète et pré-configurée (voir #ref(<section-conception-ants-os>, supplement: [section])).
 Nous décrivons ici la manière dont cette image est effectivement construite.
 
-La construction est décrite dans un unique fichier (#src("ants-os/ants-os.pkr.hcl")) et repose sur Packer@hashicorp_hashicorppacker_2026 ainsi que sur une extension spécialisée dans les images ARM/*@mkaczanowski_packer_builder_arm_2026*/.
-Cette extension part de l'image officielle de Raspberry Pi OS Lite pour l'architecture ARM64/*@raspberry_pi_operating_2026*/, l'agrandit à quatre gigaoctets afin de laisser la place aux ajouts, puis monte ses partitions pour y déposer des fichiers et y exécuter des commandes.
+La construction est décrite dans un unique fichier (#src("ants-os/ants-os.pkr.hcl")) et repose sur Packer@hashicorp_hashicorppacker_2026 ainsi que sur une extension spécialisée dans les images ARM@kaczanowski_mkaczanowskipacker-plugin-builder-arm_2026.
+Cette extension part de l'image officielle de Raspberry Pi OS Lite pour l'architecture ARM64@ltd_raspberry_2026, l'agrandit à quatre gigaoctets afin de laisser la place aux ajouts, puis monte ses partitions pour y déposer des fichiers et y exécuter des commandes.
 
 Une difficulté se pose immédiatement : le poste de développement est une machine x86, alors que les commandes de configuration doivent s'exécuter dans un environnement ARM64.
-Elle est résolue par l'émulation, l'extension exécutant les commandes à l'intérieur de l'arborescence montée par l'intermédiaire de QEMU/*@qemu_qemu_2026*/.
+Elle est résolue par l'émulation, l'extension exécutant les commandes à l'intérieur de l'arborescence montée par l'intermédiaire de QEMU@qemu_qemu_2026.
 Tout se déroule dans un conteneur Docker privilégié, ce qui évite d'installer sur le poste de développement les outils de manipulation d'images disque et les droits d'administration qu'ils exigent.
 
 Le contenu déposé dans l'image se répartit en deux catégories.
