@@ -34,6 +34,11 @@ Les extraits de code, les fichiers et les scripts cités dans ce document pointe
 Le dépôt a également un mirroir sur le GitLab de la HES-SO Genève #link("https://gitedu.hesge.ch/flg_bachelors/tb/2026/zero-config-ha-cluster").
 
 Différents modèles d'IA conversationnels ont été employés durant ce projet, principalement les modèles de Claude et Gemini, utilisés via la plateforme Perplexity/*@perplexity_perplexity_2026*/, ainsi que celle de Claude directement/*@anthropic_claude*/.
+Quelques conventions accompagnent le dépôt depuis le début du projet.
+Les grandes étapes fonctionnelles sont développées sur des branches dédiées dont le nom reprend la nature du changement et le domaine concerné, par exemple `feat/antsd-add-rescaling` (convention #emph("Conventional Branch")@conventional_branch_conventional_2026).
+Les changements plus courts, qui tiennent en un seul commit, sont en revanche déposés directement sur la branche principale : cela évite d'alourdir inutilement l'historique.
+Les messages de commit suivent la convention #emph("Conventional Commits")@conventional-commits_conventional_2026, avec un ensemble fixe de portées calquées sur les répertoires du dépôt.
+
 Ils ont servi à trois usages.
 Le premier est la recherche documentaire, pour obtenir une synthèse d'une documentation ou d'un code source tiers.
 Le deuxième est la rédaction, pour la reformulation de certains passages de ce mémoire et la relecture orthographique.
