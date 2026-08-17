@@ -1,0 +1,39 @@
+---
+config:
+  flowchart:
+    htmlLabels: false
+    nodeSpacing: 40
+    rankSpacing: 40
+  htmlLabels: false
+  theme: base
+  themeVariables:
+    edgeLabelBackground: "#FFFFFF"
+---
+flowchart TD
+    subgraph prep["Préparation, une seule fois"]
+        DL["download-assets.sh"] --> Assets[("Binaire K3s, script d'installation\net archive des images de conteneurs")]
+    end
+
+    subgraph build["Construction, dans un conteneur Docker privilégié"]
+        Base["Image officielle\nRaspberry Pi OS Lite ARM64"] --> Packer["Packer et son extension ARM\nants-os.pkr.hcl"]
+        Conf[("Nos fichiers de config :\nréseau, SSH, service systemd")] --> Packer
+        Packer --> Prov["provision.sh\nexécuté dans l'image via QEMU"]
+    end
+
+    Assets --> Packer
+    Prov --> Img[("Image disque\nants-os-rpi5-arm64.img")]
+    Img --> Flash["Écriture sur carte mémoire"]
+    Flash --> Machine(["Machine prête au premier démarrage"])
+
+    classDef script fill:#BBDEFB,stroke:#0D47A1,color:#000
+    classDef donnees fill:#C8E6C9,stroke:#1B5E20,color:#000
+    classDef etape fill:#FFE0B2,stroke:#E65100,stroke-width:2px,color:#000
+    classDef final fill:#ECEFF1,stroke:#546E7A,color:#263238
+
+    class DL,Prov,Flash script
+    class Assets,Conf,Img donnees
+    class Packer etape
+    class Base,Machine final
+
+    style prep fill:#FAFAFA,stroke:#9E9E9E,stroke-dasharray: 5 5
+    style build fill:#FAFAFA,stroke:#9E9E9E,stroke-dasharray: 5 5

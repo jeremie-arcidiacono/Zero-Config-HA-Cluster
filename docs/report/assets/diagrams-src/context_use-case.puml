@@ -1,0 +1,48 @@
+@startuml
+left to right direction
+
+skinparam actor {
+  BackgroundColor #FFE0B2
+  BorderColor #E65100
+}
+skinparam usecase {
+  BackgroundColor #BBDEFB
+  BorderColor #0D47A1
+  BackgroundColor<<auto>> #C8E6C9
+  BorderColor<<auto>> #1B5E20
+}
+skinparam rectangle {
+  BorderColor #616161
+  BackgroundColor #FAFAFA
+}
+skinparam legend {
+  BackgroundColor #FAFAFA
+  BorderColor #616161
+}
+
+actor "Client final" as Client
+
+rectangle "Cluster zéro-configuration" {
+  usecase "Mettre les machines\nsous tension" as UC_Brancher
+  usecase "Consulter et piloter\nl'état du cluster" as UC_Web
+  usecase "Exploiter les applications finales\n(IA génératives)" as UC_App
+
+  usecase "Former le cluster" as UC_Former <<auto>>
+  usecase "Rétablir le cluster\naprès une panne" as UC_Reparer <<auto>>
+}
+
+Client --> UC_Brancher
+Client --> UC_Web
+Client --> UC_App
+
+UC_Brancher ..> UC_Former : <<include>>
+UC_Former -[hidden]- UC_Reparer
+
+hide stereotype
+
+legend bottom
+  Les cas d'utilisation en vert sont pris en charge par le système, sans aucune
+  intervention technique du client. Le rétablissement est déclenché par la
+  détection d'une panne durable.
+endlegend
+@enduml

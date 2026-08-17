@@ -1,0 +1,39 @@
+---
+config:
+  theme: base
+  sequence:
+    actorMargin: 40
+    messageMargin: 20
+    boxTextMargin: 4
+    noteMargin: 6
+    width: 130
+    mirrorActors: false
+  themeVariables:
+    actorBkg: "#BBDEFB"
+    actorBorder: "#0D47A1"
+    actorTextColor: "#000000"
+    noteBkgColor: "#FFF9C4"
+    noteBorderColor: "#F57F17"
+    noteTextColor: "#000000"
+    signalColor: "#37474F"
+    signalTextColor: "#37474F"
+---
+sequenceDiagram
+    participant M as Machine réinitialisée
+    participant C as Coordinateur
+    participant K as Control Plane K3s
+
+    note over M: Vérifie qu'aucun K3s<br/>n'est installé localement
+
+    loop toutes les 15 s, jusqu'à confirmation
+        M -->> C: antsd:forget-me <son nom>
+    end
+
+    note over C: Vérifie que Serf voit cette machine<br/>vivante et en premier démarrage
+
+    C ->> K: Ce nom est-il encore un nœud dans K3s ?
+    K -->> C: oui
+    C ->> K: Suppression du nœud
+    C -->> M: antsd:forgotten <nom de la machine>
+
+    note over M: Installe K3s en agent

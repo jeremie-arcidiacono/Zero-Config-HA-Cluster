@@ -13,7 +13,7 @@ Nous exposons enfin les besoins et les contraintes du projet, ainsi que la mani�
 
 == Présentation de Kubernetes <section-context-kubernetes>
 
-Kubernetes@kubernetes_documentation_2026, aussi connu sous le nom de "K8s", intervient en tant qu'orchestrateur de conteneurs open-source.
+Kubernetes@kubernetes_documentation_2026, aussi connu sous le nom de "K8s", est un orchestrateur de conteneurs open source.
 Son rôle est d'automatiser le déploiement, la mise à l'échelle et la gestion d'applications conteneurisées sur un
 ensemble de machines appelé "cluster".
 Kubernetes est aujourd'hui devenu le standard largement adopté par l'industrie.
@@ -80,13 +80,25 @@ d'edge computing ou d'architectures ARM, tout en restant conforme à l'API Kuber
 C'est la distribution retenue pour ce projet, en raison de sa faible consommation de ressources, de sa simplicité
 d'installation et de ses optimisations pour ARM, ce qui correspond aux besoins d'ANTS A.I. Systems.
 
-Dans K3s, la terminologie est légèrement différente de celle de Kubernetes :
+Dans K3s, la terminologie est légèrement différente de celle de Kubernetes@k3s_architecture_2026 :
 
 - Un *Agent* désigne un nœud Worker.
 - Un *Server* représente un nœud Control Plane, mais il intègre également tous les composants d'un Agent et peut donc exécuter des Pods.
 
 Il est possible de former un cluster composé exclusivement de nœuds Server, sans obligation d'avoir des nœuds Agent dédiés.
 Cela s'explique par le fait qu'un nœud Server est en fait un Agent avec des responsabilités supplémentaires. Il peut donc exécuter des charges de travail tout en assurant la gestion du cluster.
+
+Il faut cependant souligner qu'il y a quelques inconvénients à cette approche.
+Premièrement, la base de données interne (etcd) d'un Server est très sensible à la latence d'écriture, si bien qu'une charge de travail qui sature le disque ou le processeur retarde ses écritures.
+Un Server qui répond trop lentement est considéré comme défaillant par ses pairs, ce qui peut dégrader le quorum du cluster.
+K3s signale d'ailleurs explicitement ce risque sur des machines dont le stockage est lent, comme un Raspberry Pi équipé d'une carte SD@k3s_high_2026.
+Le deuxième inconvénient concerne la sécurité, puisqu'un Server détient les identifiants du plan de contrôle et la totalité de la base de données du cluster.
+Une charge applicative qui s'échappe de son conteneur peut donc théoriquement accéder à ces informations sensibles, bien que le risque reste faible. Nous revenons sur cet aspect au #ref(<chapter-security>).
+
+Nous acceptons malgré tout ces inconvénients, car l'alternative est trop coûteuse dans notre contexte.
+Le produit vendu par ANTS A.I. Systems est destiné à des clients qui n'acquièrent que quelques machines.
+En réserver au moins trois à la seule gestion du cluster reviendrait à en soustraire une part considérable.
+Kubernetes fournit par ailleurs l'option nécessaire si ce choix devait être revu plus tard, sous la forme d'un paramètre qui empêchent l'ordonnanceur de placer des charges ordinaires sur les nœuds Server/*@kubernetes_taints*/.
 
 Dans la suite de ce document, nous utiliserons la terminologie de K3s plutôt que celle de Kubernetes.
 
@@ -96,6 +108,8 @@ Serf@hashicorp_hashicorpserf_2026 est l'outil retenu pour assurer la découverte
 
 Au cœur de Serf, nous retrouvons la bibliothèque Memberlist@hashicorp_hashicorpmemberlist_2026, qui gère l'appartenance au cluster et la détection de pannes en se basant sur une version modifiée du protocole #acr("SWIM")@wikipedia_swim_2026. 
 Ce dernier repose sur deux mécanismes distincts : la détection de pannes, assurée par un sondage périodique aléatoire (chaque nœud teste un membre choisi au hasard et, en cas de non-réponse, délègue ce test à quelques autres membres), et la diffusion des changements d'appartenance.
+Cette diffusion se fait de proche en proche : un nœud qui apprend une information la transmet à quelques membres tirés au hasard, qui la relaient à leur tour jusqu'à ce que tout le groupe soit informé.
+Ce mode de propagation est désigné par le terme #emph[gossip], que nous utilisons dans la suite de ce document.
 Ces deux mécanismes étant entièrement décentralisés, le protocole reste efficace lorsque le nombre de nœuds augmente, sans introduire de point de défaillance unique.
 Serf ajoute la couche d'orchestration manquante à Memberlist en complétant le système de gestion de l'appartenance avec la propagation d'événements arbitraires et l'exécution de requêtes/réponses (queries).
 
@@ -111,12 +125,12 @@ Enfin, Serf peut conserver l'état du cluster sous forme de snapshots. Cela perm
 
 Les besoins de ce projet ont trois origines. Ils viennent du produit que ANTS A.I. Systems commercialise, de l'énoncé du travail de Bachelor, et du projet de semestre qui l'a précédé@arcidiacono_systeme_2026, où une première liste de contraintes avait été posée pour cadrer la recherche de solutions existantes.
 
-Les contraintes du projet de semestre ont été écrites avant toute expérimentation sur du matériel réel, et deux d'entre elles ont évolué. Nous les présentons ici telles qu'elles étaient, puis nous expliquons ce qui les a fait évoluer. 
+Les contraintes du projet de semestre ont été écrites avant toute expérimentation sur du matériel réel, et deux d'entre elles ont évolué. Nous les présentons ici telles qu'elles étaient, puis nous expliquons ce qui a motivé leur évolution. 
 // Cette section décrit donc le problème à résoudre, et non la solution : la manière dont l'architecture y répond fait l'objet du #ref(<chapter-conception>).
 
 === Besoins
 
-Le point de départ est un lot de machines identiques, sorties de leur emballage, que le client branche à l'alimentation et au réseau local. À partir de cet instant, tout doit se faire sans lui.
+Le point de départ est un lot de machines identiques, sorties de leur emballage, que le client branche à l'alimentation et au réseau local. À partir de cet instant, tout doit se dérouler sans lui.
 
 Les machines doivent d'abord se trouver mutuellement sur le réseau, sans que personne n'ait à saisir la moindre adresse. Elles doivent ensuite installer K3s, puis s'accorder sur la configuration du cluster à former et sur le rôle de chacune. Une machine ajoutée plus tard, alors que le cluster est déjà en service, doit rejoindre celui-ci d'elle-même, sans que le cluster existant ait à être arrêté ou reconfiguré.
 
@@ -124,14 +138,14 @@ Le système doit enfin survivre aux pannes. La perte d'une machine ne doit pas i
 
 L'ensemble doit rester clé en main. Le client type de ANTS A.I. Systems est une petite entreprise ou un indépendant, qui ne possède pas d'équipe technique ni les ressources nécessaires pour gérer une infrastructure complexe. Les machines sont donc vendues comme un produit autonome.
 
-Le client a malgré tout besoin d'une fenêtre sur son cluster, pour en consulter l'état et déclencher les rares actions qui lui reviennent. Cette fenêtre prend la forme d'une interface web, dont la réalisation sort du périmètre de ce travail.
+Le client doit malgré tout pouvoir garder un œil sur son cluster, pour en consulter l'état et déclencher les rares actions qui lui reviennent. Cet accès prend la forme d'une interface web, dont la réalisation sort du périmètre de ce travail.
 Cependant, les informations et les commandes qu'elle expose doivent être fournies par le système.
-De plus, les machines vendues par ANTS A.I. possèderont probablement, en plus de l'interface web, un écran et quelques boutons physiques (ou un écran tactile), qui permettront là aussi d'afficher l'état du cluster et de déclencher quelque actions.
+De plus, les machines vendues par ANTS A.I. Systems possèderont probablement, en plus de l'interface web, un écran et quelques boutons physiques (ou un écran tactile), qui permettront là aussi d'afficher l'état du cluster et de déclencher quelques actions.
 Pour les besoins de démonstration et de validation, une interface web minimale a été développée.
 Cette interface est une fusion de l'interface web et de l'écran physique.
 
 
-La #ref(<fig_context_use-case>) résume ces attentes. Elle sépare ce que le client fait, à savoir brancher les machines, consulter le cluster et exploiter ses applications, de ce que le système prend en charge seul, à savoir former le cluster et le rétablir après une panne.
+La #ref(<fig_context_use-case>) résume ces attentes. Elle sépare les actions du client, à savoir brancher les machines, consulter le cluster et exploiter ses applications, de ce que le système prend en charge seul, à savoir former le cluster et le rétablir après une panne.
 
 #hepia.sourced_figure(
   caption: [Diagramme de cas d'utilisation],

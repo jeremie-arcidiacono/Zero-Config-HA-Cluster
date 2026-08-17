@@ -1,11 +1,11 @@
 #import "../lib/lib.typ" as hepia
 #import "@preview/acrostiche:0.7.0": *
-#import "../globals.typ": urls
+#import "../globals.typ": urls, src, src_dir, pkg
 
 = Implémentation <chapter-implementation>
 
 Le chapitre précédent a décrit l'architecture retenue pour notre solution, les responsabilités de chacune de ses couches et les mécanismes qui permettent à un groupe de machines de former un cluster sans intervention humaine.
-Ces éléments expliquent ce que le système doit faire, mais pas encore comment il le fait.
+Ces éléments expliquent ce que le système doit accomplir, mais pas encore comment il s'y prend.
 C'est l'objet de ce chapitre : nous y présentons la manière dont ces décisions se traduisent en code, les problèmes concrets rencontrés lors de la réalisation, ainsi que les compromis retenus pour les résoudre.
 
 Nous commençons par l'organisation générale du code de antsd, puis nous suivons le trajet d'une information à travers le programme.
@@ -25,33 +25,40 @@ antsd est un programme entièrement piloté par des événements, qui doit réag
 Enfin, Serf et Memberlist sont eux-mêmes écrits en Go.
 Les embarquer sous forme de bibliothèque, comme décidé lors de la conception, ne demande donc aucune couche d'adaptation entre deux langages ou entre deux processus.
 
+Comparons ce choix à d'autres langages possibles.
+Go est un langage compilé et typé statiquement : il offre de meilleures performances qu'un langage interprété et déplace une partie des erreurs vers la compilation, ce qui compte pour un programme qui s'exécute sans surveillance sur des machines installées chez un client, et qui devra être maintenu sur la durée.
+Le C partage ces deux propriétés, mais il ne fournit ni gestion automatique de la mémoire ni primitives de concurrence légères, alors que ce sont exactement les besoins de ce daemon.
+Ses avantages habituels, à savoir le contrôle fin de la mémoire et l'absence de garbage collector, ne se manifesteraient nulle part dans un programme qui passe l'essentiel de son temps à attendre des événements.
+Rust apporte de son côté des garanties de sûreté supérieures à celles de Go, au prix d'une courbe d'apprentissage et d'un temps de développement nettement plus élevés, ce qui se conçoit mal dans un projet de douze semaines.
+
 Le code suit la disposition habituelle des projets Go.
-Le répertoire `cmd/antsd` contient le point d'entrée du programme, qui reste volontairement simple : il charge la configuration, construit la journalalisation, met en place l'interception des signaux d'arrêt du système, puis délègue tout le reste au gestionnaire de cluster.
+Le répertoire #src_dir("antsd/cmd/antsd", body: [`cmd/antsd`]) contient le point d'entrée du programme, qui reste volontairement simple : il charge la configuration, construit la journalisation, met en place l'interception des signaux d'arrêt du système, puis délègue tout le reste au gestionnaire de cluster.
 Tout le code métier se trouve sous `internal/`.
 
 Le découpage en paquets suit les responsabilités identifiées lors de la conception, illustrées par le diagramme de composants de la #ref(<fig_conception_antsd-components>).
-Le paquet `cluster` contient le gestionnaire, c'est-à-dire l'orchestrateur central qui possède l'état du cycle de vie et enchaîne les étapes des différents scénarios.
-Le paquet `serfnode` encapsule l'instance Serf embarquée, et s'appuie sur le paquet `discovery` qui réalise la découverte des machines par mDNS.
-Le paquet `k3s` regroupe tout ce qui concerne l'installation, la surveillance et le contrôle de l'instance locale de K3s.
-Le paquet `admin` expose l'interface HTTP de supervision et de contrôle.
-Le paquet `config` rassemble la lecture et la validation des paramètres de démarrage.
-Un dernier paquet, `logbridge`, joue un rôle plus discret : les bibliothèques de HashiCorp écrivent leurs messages dans un format qui leur est propre (avec l'ancien package "log" de la librairie standard Go), et ce paquet les traduit vers le nôtre afin que tout le programme produise un journal homogène.
-antsd utilise le paquage `log/slog`, le standard moderne de journalisation de Go, introduite dans la version 1.21 du langage.
+Le paquet #pkg("cluster") contient le gestionnaire, c'est-à-dire l'orchestrateur central qui possède l'état du cycle de vie et enchaîne les étapes des différents scénarios.
+Le paquet #pkg("serfnode") encapsule l'instance Serf embarquée, et s'appuie sur le paquet #pkg("discovery") qui réalise la découverte des machines par mDNS.
+Le paquet #pkg("k3s") regroupe tout ce qui concerne l'installation, la surveillance et le contrôle de l'instance locale de K3s.
+Le paquet #pkg("admin") expose l'interface HTTP de supervision et de contrôle.
+Le paquet #pkg("config") rassemble la lecture et la validation des paramètres de démarrage.
+Un paquet supplémentaire, #pkg("logbridge"), joue un rôle plus discret : les bibliothèques de HashiCorp écrivent leurs messages dans un format qui leur est propre (avec l'ancien package "log" de la librairie standard Go), et ce paquet les traduit vers le nôtre afin que tout le programme produise un journal homogène.
+antsd utilise le paquet `log/slog`, le standard moderne de journalisation de Go, introduit dans la version 1.21 du langage.
 
-Un dernier paquet, nommé `node`, mérite une attention particulière, car il occupe une place à part dans cette organisation.
-Il ne contient aucune logique technique, mais plutot divers types et fonctions utiles : les états du cycle de vie, le rôle K3s d'une machine, le calcul du rôle et la structure de l'état persisté.
+Un dernier paquet, nommé #pkg("node"), mérite une attention particulière, car il occupe une place à part dans cette organisation.
+Il ne contient aucune logique technique, mais plutôt divers types et fonctions utiles : les états du cycle de vie, le rôle K3s d'une machine, la détermination du rôle et la structure de l'état persisté.
 Surtout, il ne dépend d'aucun autre paquet du projet.
-Cette contrainte est utile : puisque tous les autres paquets ont besoin de manipuler des états et des rôles, faire porter ces types par un paquet sans dépendance évite les cycles d'importation.
+Cette contrainte est utile : puisque tous les autres paquets ont besoin de manipuler des états et des rôles, confier ces types à un paquet sans dépendance évite les cycles d'importation.
 Les dépendances du programme sont ainsi toutes dirigées vers ce noyau commun, et jamais l'inverse.
 
-// La #ref(<fig_implementation_packages>) rend cette organisation visible.
-// Il faut la distinguer du diagramme de composants présenté lors de la conception : ce dernier montre quels éléments dialoguent entre eux pendant l'exécution, alors que celui-ci montre quel paquet en importe un autre à la compilation.
+La #ref(<fig_implementation_packages>) rend cette organisation visible.
+Il faut la distinguer du diagramme de composants présenté lors de la conception : ce dernier montre quels éléments dialoguent entre eux pendant l'exécution, alors que celui-ci montre quel paquet en importe un autre à la compilation.
+Les trois paquets en vert n'ont aucune flèche sortante, ce qui traduit exactement la règle énoncée ci-dessus.
 
-// #hepia.sourced_figure(
-//   caption: [Dépendances entre les paquets de antsd],
-//   label: <fig_implementation_packages>,
-//   image("../assets/diagrams/implementation_packages.svg"),
-// )
+#hepia.sourced_figure(
+  caption: [Dépendances entre les paquets de antsd],
+  label: <fig_implementation_packages>,
+  image("../assets/diagrams/implementation_packages.svg", width: 90%),
+)
 
 La configuration suit la même volonté de simplicité.
 Tous les paramètres de fonctionnement, comme le port de Serf, le port du serveur HTTP ou le chemin du fichier d'état, sont lus au démarrage, à partir des arguments de la ligne de commande ou, à défaut, des variables d'environnement.
@@ -71,7 +78,7 @@ Plutôt que de laisser circuler les types de Serf dans tout le programme, il les
 Cette frontière offre un grand avantage : si l'API de Serf évolue, ou si nous devions un jour changer de mécanisme de communication, un seul paquet serait à reprendre.
 #highlight("todo : parler de l'interface qu'on peut mock pour les tests ?")
 
-`serfnode` va aussi faire une traduction des événements.
+`serfnode` traduit également les événements.
 Serf livre les changements d'appartenance sous forme de lots, qui peuvent concerner plusieurs machines à la fois.
 Nous les dépilons pour émettre un événement par machine concernée, ce qui simplifie le traitement en aval.
 
@@ -82,7 +89,7 @@ La conséquence est essentielle pour la suite du chapitre : chaque machine conna
 
 La diffusion d'événements demande elle aussi une attention particulière.
 Serf sait regrouper plusieurs événements portant le même nom lorsqu'ils surviennent dans un intervalle rapproché, afin de réduire le trafic.
-Ce comportement est désactivé pour les événements de notre protocole de démarrage, car leur fusion pourrait faire disparaître une information nécessaire à la progression du cluster.
+Ce comportement est désactivé pour les événements de notre protocole de démarrage, car leur fusion pourrait supprimer une information nécessaire à la progression du cluster.
 
 Reste la question de l'amorçage de la découverte.
 Serf sait entretenir un groupe de machines, mais il faut lui fournir l'adresse d'au moins un pair pour qu'il puisse le rejoindre, ce qui est incompatible avec notre objectif de zéro-configuration.
@@ -91,7 +98,7 @@ Des tests avaient montré que cette fonctionnalité fonctionnait correctement, m
 Or, la fonctionnalité mDNS de Serf n'existe en réalité pas dans le coeur de la librairie, mais dans le paquet annexe qui est propre à l'outil en ligne de commande.
 Cet imprévu nous oblige donc à réimplémenter la découverte mDNS dans notre code.
 
-C'est le rôle du paquet `discovery`, qui s'appuie sur la bibliothèque mDNS de HashiCorp/*@hashicorp_mdns_2026*/.
+C'est le rôle du paquet #pkg("discovery") (#src("antsd/internal/discovery/mdns.go")), qui s'appuie sur la bibliothèque mDNS de HashiCorp/*@hashicorp_mdns*/.
 Puisque Serf utilise lui-même cette bibliothèque dans sa version standalone en ligne de commande, nous nous inspirons de son code pour construire notre propre implémentation.
 Chaque machine se tient prête à annoncer sa présence sur le réseau local (elle écoute les requêtes entrantes) et interroge périodiquement ce dernier (elle envoie des requêtes), toutes les cinq secondes, à la recherche d'autres machines qui écoutent.
 Lorsqu'une nouvelle adresse apparaît, elle est transmise à `serfnode`, qui demande alors à Serf de rejoindre ce pair.
@@ -100,7 +107,7 @@ Les adresses déjà vues sont mémorisées afin de ne pas répéter inutilement 
 Le nom du service annoncé joue un rôle de cloisonnement.
 Il est construit à partir du nom du cluster, sous la forme `_antsd-<cluster>._tcp`.
 Deux ensembles de machines ANTS branchés sur le même réseau local ne se découvrent donc pas mutuellement s'ils portent des noms de cluster différents, et ne risquent pas de fusionner par accident.
-Le mécanisme est en place, mais il faut préciser que ce nom est pour l'instant figé : il n'est pas du tout prévu de faire fonctionner plusieurs clusters simultanément sur un même réseau local, alors toutes les machines utilisent le même nom.
+Le mécanisme est en place, mais il faut préciser que ce nom est pour l'instant figé : il n'est pas prévu d'exploiter plusieurs clusters simultanément sur un même réseau local, alors toutes les machines utilisent le même nom.
 
 Ce cloisonnement a par ailleurs révélé qu'il ne fonctionnait que dans un seul sens.
 Donner un nom précis à nos requêtes garantit que les autres n'y répondent pas, mais ne garantit rien sur ce que nous recevons : la bibliothèque mDNS analyse tous les enregistrements qui circulent sur le groupe de diffusion, et pas seulement les réponses à notre propre requête.
@@ -132,17 +139,22 @@ Les minuteurs du protocole de démarrage expirent indépendamment du reste.
 Enfin, les installations de K3s, qui durent plusieurs minutes, doivent signaler leur issue une fois terminées.
 Toutes ces sources aboutissent au même endroit : l'état courant de la machine.
 
-La réponse la plus immédiate consisterait à protéger cet état par un verrou.
+Or chacune d'elles s'exécute dans sa propre goroutine, alors que cet état est une donnée unique, partagée entre toutes.
+Deux problèmes en découlent, et il faut les distinguer pour comprendre la suite.
+Le premier est technique : deux goroutines qui accèdent à la même variable sans précaution forment un accès concurrent, dont le résultat est indéterminé.
+Le second est plus gênant, car il subsiste même si chaque lecture et chaque écriture est correcte. Une transition ne se résume pas à une écriture : elle lit l'état, décide d'une action, publie un tag Serf et démarre parfois une installation de K3s. Si une autre source intervient au milieu de cette séquence, la machine peut prendre deux décisions contradictoires, par exemple lancer deux installations à la fois ou installer un rôle qui ne correspond plus à l'état qu'elle vient de publier.
+C'est donc la séquence entière, et pas seulement la variable, qu'il faut protéger.
+
+La réponse la plus immédiate consisterait à poser un verrou sur cet état.
 Nous l'avons écartée.
-Un verrou est simple tant qu'il ne protège qu'une lecture ou une écriture isolée, mais notre cas est différent : une transition consiste à lire l'état, à décider d'une action, à publier un tag Serf et parfois à démarrer une installation.
-Il faudrait donc conserver le verrou pendant toute la séquence, ce qui multiplie les risques d'interblocage et rend le raisonnement local difficile dès que les transitions s'enchaînent.
+Un verrou est simple tant qu'il ne protège qu'une lecture ou une écriture isolée, mais il faudrait ici le conserver pendant toute la séquence décrite ci-dessus, ce qui multiplie les risques d'interblocage et rend le raisonnement local difficile dès que les transitions s'enchaînent.
 
 Nous avons retenu l'approche inverse : plutôt que de partager l'état entre plusieurs goroutines, une seule goroutine le possède, et les autres lui envoient des messages.
 Le gestionnaire exécute donc une unique boucle qui attend, en parallèle, l'arrêt du programme, l'arrivée d'un événement Serf, ou une commande interne.
 Le #ref(<code_implementation_runloop>) présente cette boucle, qui tient en quelques lignes.
 
 #hepia.sourced_figure(
-  caption: [Boucle principale du gestionnaire de cluster],
+  caption: [Boucle principale du gestionnaire de cluster (#src("antsd/internal/cluster/manager.go"))],
   label: <code_implementation_runloop>,
   supplement: [Code],
   ```go
@@ -169,7 +181,7 @@ Le commentaire de la branche d'arrêt mérite une explication, car l'absence d'u
 Serf offre une opération qui annonce le départ d'une machine au reste du groupe, et l'appeler ici serait le réflexe naturel.
 Nous ne le faisons jamais, car ce départ annoncé porte un sens précis dans notre système : il signifie que la machine est retirée définitivement (décommissionnement).
 Un redémarrage, un plantage et une coupure de courant doivent au contraire se ressembler, puisque dans les trois cas la machine peut revenir.
-En restant silencieux à l'arrêt, le daemon fait en sorte que ces trois situations produisent exactement le même signal chez les autres, ce qui permet ensuite à un seul chemin de reprise de les couvrir toutes.
+En restant silencieux à l'arrêt, le daemon garantit que ces trois situations produisent exactement le même signal chez les autres, ce qui permet ensuite à un seul chemin de reprise de les couvrir toutes.
 L'opération reste disponible dans notre encapsulation de Serf, mais elle est réservée au décommissionnement.
 
 La conséquence de cette organisation est que l'état du cycle de vie n'a besoin d'aucun verrou : il n'est lu et modifié que par la goroutine de la boucle, et toutes les modifications sont donc naturellement réalisées en série.
@@ -193,7 +205,7 @@ Le gestionnaire ne s'adresse pas directement à notre encapsulation de Serf, mai
 Elle ne contient rien de plus que ce dont la boucle a besoin : démarrer l'agent, publier l'état local, diffuser un événement, retirer une machine du groupe et obtenir une photo des membres.
 
 #hepia.sourced_figure(
-  caption: [Interface par laquelle le gestionnaire accède à Serf],
+  caption: [Interface par laquelle le gestionnaire accède à Serf (#src("antsd/internal/cluster/manager.go"))],
   label: <code_implementation_serfapi>,
   supplement: [Code],
   ```go
@@ -213,15 +225,15 @@ Elle ne contient rien de plus que ce dont la boucle a besoin : démarrer l'agent
 
 Cette interface a une première utilité de conception, puisqu'elle énonce en un seul endroit tout ce que la logique du cycle de vie est capable de demander au réseau.
 Sa conséquence la plus utile est cependant ailleurs : on peut créer une implémentation qui la satisfait mais qui ne communique pas  réellement sur le réseau.
-Associée à l'interface d'installation de K3s présentée plus loin, elle permet de faire tourner le gestionnaire entier sans Serf, sans K3s et sans matériel, ce qui est très utile pour réaliser des tests.
+Associée à l'interface d'installation de K3s présentée plus loin, elle permet d'exécuter le gestionnaire entier sans Serf, sans K3s et sans matériel, ce qui est très utile pour réaliser des tests.
 Nous y revenons dans le #ref(<chapter-tests>).
 
 == Bootstrapping <section-implementation-bootstrap>
 
 Le déroulement du premier démarrage a été décrit lors de la conception, et illustré par le diagramme de séquence de la #ref(<fig_conception_bootstrap-sequence>).
-Concentrons-nous sur les trois difficultés que pose sa mise en œuvre.
+Son implémentation se trouve dans le fichier #src("antsd/internal/cluster/bootstrap.go"), et nous nous concentrons ici sur les trois difficultés qu'elle pose.
 
-=== Election de rôle
+=== Détermination du rôle
 
 La première difficulté consiste à attribuer un rôle à chaque machine.
 Une approche courante dans les systèmes distribués consisterait à mettre en place une élection, c'est-à-dire un échange de messages au terme duquel les participants s'accordent sur un vainqueur.
@@ -233,7 +245,7 @@ Puisque l'entrée du calcul est identique partout et que le calcul lui-même est
 La #ref(<code_implementation_role>) montre ces deux fonctions, dont la simplicité illustre bien l'intérêt de l'approche.
 
 #hepia.sourced_figure(
-  caption: [Calcul déterministe du rang et du rôle d'une machine],
+  caption: [Détermination du rang et du rôle d'une machine (#src("antsd/internal/node/role.go"))],
   label: <code_implementation_role>,
   supplement: [Code],
   ```go
@@ -273,7 +285,7 @@ Une population de une ou deux machines appelle donc un seul serveur, trois ou qu
 Trois est le plancher de la haute disponibilité, c'est-à-dire le plus petit nombre de membres permettant à la base de données interne de K3s de conserver un quorum malgré la perte d'une machine. Sept en est le plafond recommandé, au-delà duquel le coût de la performance (à cause de la réplication des données) dépasse le gain de résilience@etcd_etcd_nodate.
 La justification de la parité, ainsi que le mécanisme qui maintient cette cible au cours de la vie du cluster, sont présentés dans la #ref(<section-implementation-rescaling>, supplement: [section]).
 
-=== Tolérante aux doublons et au désordre
+=== Tolérance aux doublons et au désordre
 
 La deuxième difficulté est de s'assurer que le protocole tolère que l'ordre d'arrivée des messages soit différent de l'ordre dans lequel ils ont été émis, et que certains messages soient reçus plusieurs fois.
 
@@ -317,7 +329,7 @@ La première est celle des doublons.
 Les récepteurs traitent le premier signal, changent d'état, puis ignorent les suivants qui ne correspondent plus à leur état : aucune coordination supplémentaire n'est nécessaire pour éviter le double traitement.
 
 La seconde situation est celle de l'inversion.
-Une machine peut voir un serveur devenir disponible dans les tags avant même d'avoir reçu le signal de départ, tout simplement parce que les deux informations empruntent des chemins différents dans le réseau épidémique.
+Une machine peut voir un serveur devenir disponible dans les tags avant même d'avoir reçu le signal de départ, tout simplement parce que les deux informations se propagent de proche en proche par le gossip de Serf, et n'empruntent donc pas nécessairement le même chemin.
 C'est très peu probable compte tenu de la durée d'installation, mais cela reste possible.
 Pour absorber ce cas, la décision de lancer l'installation n'est attachée à aucun événement particulier.
 Elle est prise par deux fonctions, une pour les serveurs et une pour les agents, qui sont appelées aussi bien à la réception du signal de départ qu'à chaque changement observé dans la liste des membres.
@@ -328,7 +340,7 @@ L'installation démarre dès que ces conditions sont réunies, quel que soit l'o
 === Traitement des échecs
 
 La troisième difficulté concerne les échecs, en particulier ceux de l'installation de K3s.
-Le choix retenu est de faire basculer la machine dans un état terminal, à partir duquel elle ne progresse plus, plutôt que de relancer automatiquement l'opération.
+Le choix retenu est de placer la machine dans un état terminal, à partir duquel elle ne progresse plus, plutôt que de relancer automatiquement l'opération.
 
 Ce choix est motivé par des besoins de sureté.
 Une machine qui réessaie indéfiniment produit un cluster partiellement formé dont l'état oscille, ce qui est bien plus difficile à diagnostiquer qu'une machine clairement arrêtée sur une erreur.
@@ -341,7 +353,7 @@ La reprise consiste alors à remettre la machine à zéro, ce qui n'est pas sans
 Le protocole de la section précédente construit un cluster.
 Il reste à le maintenir : une machine ajoutée doit s'y intégrer, et une machine définitivement perdue doit en sortir.
 
-Ces deux besoins sont traités par deux mécanismes distincts, et la frontière entre les deux doit être explicite.
+Ces deux besoins sont traités par deux mécanismes distincts, implémentés dans #src("antsd/internal/cluster/joining.go") et #src("antsd/internal/cluster/rescale.go"), et la frontière entre les deux doit être explicite.
 Le chemin de #emph[joining] concerne une machine vierge qui démarre à côté d'un cluster déjà en service : elle s'installe en agent, sans jamais toucher aux machines existantes.
 Le #emph[redimensionnement] concerne à l'inverse les machines déjà installées, dont il change le rôle.
 
@@ -350,7 +362,7 @@ Le #emph[redimensionnement] concerne à l'inverse les machines déjà installée
 Le risque principal du premier démarrage n'est pas qu'une machine échoue, mais qu'un lot de machines vierges branchées à côté d'un cluster sain se mette à en construire un deuxième.
 Les deux clusters coexisteraient alors sur le même réseau, chacun ignorant l'autre, ce qui créerait une incohérence.
 
-Le critère pour faire ce choix est la présence, dans les tags Serf, d'une machine vivante annonçant l'état `stable_server`.
+Le critère de ce choix est la présence, dans les tags Serf, d'une machine vivante annonçant l'état `stable_server`.
 C'est le seul signal qui prouve qu'un cluster est non seulement présent, mais joignable, alors qu'un cluster dont tous les serveurs redémarrent ne l'est pas.
 Le refus de créer un cluster à côté d'un cluster en cours de reprise est traité séparément, par une sécurité propre au bouton de création.
 
@@ -367,7 +379,7 @@ Ce cas se produit après un premier démarrage qui a échoué tardivement, une f
 Ces trois refus se recouvrent en partie, mais aucun ne remplace les deux autres.
 
 Reste à décider du rôle que prend la machine qui rejoint.
-La première version du protocole tentant de faire en sorte que la machine le déduisait elle-même, en comparant le nombre de serveurs engagés à la cible que sa population appelle, et s'installait en serveur tant qu'un emplacement restait libre.
+Dans la première version du protocole, la machine déterminait ce rôle elle-même : elle comparait le nombre de serveurs déjà engagés à la cible correspondant à la population observée, et s'installait en serveur tant qu'un emplacement restait libre.
 Un essai sur les machines physiques a montré que c'est précisément la décision qu'une machine qui arrive ne peut pas prendre.
 Une machine démarrée #emph[après] une panne n'apprend jamais l'existence du membre qui ne répond pas.
 C'est un choix d'implémentation de Serf : lorsque la bibliothèque de gossip voit un nœud annoncé comme mort, elle l'ignore si elle n'a jamais entendu parler de lui.
@@ -380,11 +392,11 @@ La conclusion retenue est que dimensionner le plan de contrôle appartient aux m
 
 Tous les mécanismes qui suivent désignent des machines par leur nom, il faut donc d'abord dire ce qu'est ce nom.
 
-antsd dérive automatiquement son nom, à partir des trois derniers octets de l'adresse MAC de la carte réseau de la machine, ce qui donne par exemple `ants-669eae`.
+antsd dérive automatiquement son nom à partir des trois derniers octets de l'adresse MAC de la carte réseau de la machine, ce qui donne par exemple `ants-669eae` (#src("antsd/internal/config/nodename.go")).
 Le nom peut toute fois être remplacé par l'utilisateur, mais il est conseillé de ne pas le modifier manuellement pour éviter les collisions.
 Ce nom est transmis à K3s lors de l'installation, afin que le nœud Kubernetes porte exactement le même.
 
-Kubernetes impose une forme précise, celle des labels définies par la RFC 1123 /*TODO REF*/.
+Kubernetes impose une forme précise, celle des labels définis par la RFC 1123/*@kubernetes_object_names*/.
 antsd s'assure que le nom est conforme à cette forme.
 
 Autre point d'attention : l'adresse matérielle est lue sur une interface physique uniquement, reconnue à la présence d'un périphérique associé dans le système de fichiers du kernel ( `/sys/class/net/` ).
@@ -400,11 +412,19 @@ Cependant, après une réinitialisation et une remise en route, l'éviction ne s
 
 Pour les raisons exposées dans la #ref(<part-conception-bootstrap>, supplement: [partie]) du #ref(<chapter-conception>), une machine réinitialisée ne peut pas rejoindre le cluster comme si de rien n'était.
 
-La correction consiste à faire nettoyer le cluster par la machine elle-même, au seul moment où c'est possible, c'est-à-dire à son retour et avant qu'elle n'installe quoi que ce soit.
+La correction consiste à confier ce nettoyage à la machine elle-même, au seul moment où c'est possible, c'est-à-dire à son retour et avant qu'elle n'installe quoi que ce soit (#src("antsd/internal/cluster/forget.go")).
 La machine vérifie d'abord localement qu'aucun K3s n'est installé chez elle.
 Elle diffuse ensuite une demande d'oubli portant son nom.
 Le coordinateur cherche un nœud K3s avec ce nom et le supprime s'il existe, puis diffuse une confirmation.
 La machine installe enfin son agent.
+
+La #ref(<fig_implementation_forget-me>) résume cet échange.
+
+#hepia.sourced_figure(
+  caption: [Protocole d'oubli d'une machine réinitialisée],
+  label: <fig_implementation_forget-me>,
+  image("../assets/diagrams/implementation_forget-me.svg"),
+)
 
 Deux décisions de ce protocole sont intéressantes à commenter.
 
@@ -413,13 +433,12 @@ Installer sans confirmation serait inutile : la machine échouerait à rejoindre
 
 La deuxième concerne une vérification chez le coordinateur.
 Il n'honore une demande que si Serf voit la machine nommée vivante et en cours de premier démarrage.
-Cela évite qu'une requête perdu supprime un nœud K3s fonctionnel.
+Cela évite qu'une requête égarée supprime un nœud K3s fonctionnel.
 
 === Nombre de serveurs dynamique
 
-Le redimensionnement repose entièrement sur la cible calculée par `DesiredServerCount`, présentée plus haut : le plus grand nombre impair inférieur ou égal à la population, plafonné à sept.
-
-Le maintien de la parité impaire est indispensable.
+Le redimensionnement repose entièrement sur la cible calculée par `DesiredServerCount`, définie plus haut.
+Le maintien de la parité impaire y est indispensable.
 Un groupe etcd de quatre membres exige un quorum de trois, exactement comme un groupe de cinq : il ne tolère donc pas plus de pannes, tout en doublant la surface sur laquelle une panne peut survenir.
 Le cas d'une population de deux machines est le plus contre-intuitif : la cible y descend à un seul serveur, parce que deux machines sont mieux servies par un serveur que par une base à deux membres qui ne survit à aucune perte.
 
@@ -443,7 +462,7 @@ Expliquer pourquoi cette sérialisation est une protection best-effort est impor
 Lire les tags des autres machines puis modifer le siens ne constitue pas une opération atomique : le nouveux tag met du temps à parvenir aux autres, si bien que deux machines peuvent décider d'agir après s'être mutuellement lues inactives.
 
 Ce qui rend un changement concurrent sûr n'est donc pas cette garde, mais la base de données etcd elle-même.
-Ses reconfigurations et modification sont déjà protégés contre les actions dangereuses /* ef @etcd_runtime_2026 ?*/.
+Ses reconfigurations sont déjà protégées contre les opérations dangereuses/*@etcd_runtime_2026*/.
 Une opération impossible reçoit donc une erreur plutôt que de corrompre le cluster.
 Le coordinateur abandonne, et retentera plus tard, avec une observation plus récente.
 
@@ -503,6 +522,7 @@ Les deux sections précédentes décrivent des machines vierges, qui n'ont encor
 Une machine qui redémarre est un cas différent, et c'est le plus fréquent une fois le cluster en service : une coupure de courant, un redémarrage volontaire ou un plantage se ressemblent tous vus de l'extérieur.
 
 Ce qui distingue ce cas des autres est le fichier d'état laissé sur le disque, décrit dans la #ref(<section-implementation-persistence>, supplement: [section]).
+Le chemin correspondant est implémenté dans #src("antsd/internal/cluster/rejoin.go").
 Sa présence signifie que le premier démarrage a déjà eu lieu, donc que K3s est installé.
 Le daemon prend alors un chemin très court, et surtout il ne réinstalle rien.
 K3s est un service systemd : il redémarre tout seul avec la machine et se reconnecte à ses pairs sans que antsd ait à intervenir.
@@ -521,15 +541,12 @@ Ni un fichier d'état illisible, ni un rôle qui ne correspond pas, ni un évén
 La raison est simple : rejouer le premier démarrage relancerait le script d'installation de K3s par-dessus des données déjà existantes.
 Le daemon préfère donc s'arrêter plutôt que de risquer de détruire les données du cluster, et cette règle est vérifiée par un test dédié.
 
-
-#highlight("TODO : Update ca après changement dans le code")
-Contrairement au premier démarrage, l'attente n'est ici bornée par aucune échéance.
-Le choix se défend, car une machine qui revient doit pouvoir prendre le temps qu'il lui faut, mais il a une conséquence qu'il faut assumer.
-Cette étape fait partie de celles qui prennent l'exclusion mutuelle décrite plus haut, puisqu'un serveur qui revient se raccroche au quorum.
-Une machine qui n'en sort jamais gèle donc les changements de membres pour tout le cluster.
-Le cas se produit réellement dans une situation précise : une machine évincée qui est ensuite remise sous tension revient dans le groupe Serf comme si de rien n'était, alors que son K3s ne peut plus rejoindre une base dont il a été retiré.
-Elle attend alors indéfiniment.
-La seule sortie est une remise à zéro de la machine.
+Cette attente est bornée par une échéance de dix minutes, alors qu'elle était illimitée dans une première version.
+Ce revirement ne s'explique pas par la machine qui redémarre, à qui l'attente ne coûte rien, mais par le reste du cluster : cette étape fait partie de celles qui empêchent tout changement de membres, puisqu'un serveur qui revient se raccroche au quorum.
+Une machine qui n'en sortirait jamais gèlerait donc les réparations de l'ensemble du cluster.
+Le cas se produit réellement lorsqu'une machine évincée est remise sous tension : elle revient dans le groupe Serf comme si de rien n'était, alors que son K3s ne peut plus rejoindre une base dont il a été retiré.
+Passé le délai, elle bascule dans l'état d'échec, qui ne bloque plus les réparations.
+Sa seule issue reste une remise à zéro, mais elle n'immobilise plus le cluster en attendant.
 
 == Pilotage de l'installation de K3s <section-implementation-k3s>
 
@@ -540,7 +557,7 @@ Le paquet `k3s` définit pour cela une interface qui décrit les opérations att
 On y retrouve les trois cas de figure du protocole de démarrage, la conversion utilisée par le redimensionnement, les deux attentes de disponibilité et la lecture du rôle déjà installé.
 
 #hepia.sourced_figure(
-  caption: [Interface d'installation de K3s],
+  caption: [Interface d'installation de K3s (#src("antsd/internal/k3s/installer.go"))],
   label: <code_implementation_installer>,
   supplement: [Code],
   ```go
@@ -583,7 +600,7 @@ Ce sont les opérations que le redimensionnement utilise pour évincer une machi
 Elles ne peuvent s'exécuter que depuis un serveur, car un agent ne dispose d'aucun fichier d'identification administrateur.
 C'est exactement la même asymétrie que celle des deux attentes de disponibilité, et c'est pour cette raison que les deux interfaces restent distinctes au lieu d'en former une seule (en plus du fait que les responsabilités sont différentes).
 
-L'implémentation réelle s'appuie sur le script d'installation officiel de K3s, déposé dans l'image lors de sa construction.
+L'implémentation réelle (#src("antsd/internal/k3s/exec.go")) s'appuie sur le script d'installation officiel de K3s, déposé dans l'image lors de sa construction.
 Elle l'exécute en lui transmettant, par variables d'environnement, le mode souhaité, le jeton partagé qui autorise la machine à rejoindre le cluster et, pour les machines qui rejoignent, l'adresse du premier serveur.
 Une variable en particulier mérite d'être signalée : elle indique au script de ne jamais tenter de télécharger quoi que ce soit, puisque le binaire de K3s est déjà présent sur le disque.
 Sans elle, la première machine du cluster chercherait à joindre Internet et échouerait sur un site isolé.
@@ -602,9 +619,9 @@ Un agent n'héberge aucune API et ne possède aucun accès administrateur, il de
 // Une machine sur laquelle K3s ne démarrera jamais reste donc bloquée dans le script, sans qu'aucune horloge ne tourne, et borner la seule attente laisserait passer exactement les cas problématiques.
 // Dix minutes est une durée volontairement généreuse : sur un Raspberry Pi dont le stockage est une carte mémoire, le premier démarrage de K3s est sensiblement plus lent que sur un serveur classique.
 
-L'existence même de cette interface se justifie par une seconde implémentation, qui ne fait qu'inscrire dans les journaux l'opération demandée avant d'attendre un court instant et de signaler une réussite.
+L'existence même de cette interface se justifie par une seconde implémentation, qui se contente d'inscrire dans les journaux l'opération demandée avant d'attendre un court instant et de signaler une réussite.
 Cette implémentation simulée rend possible le développement du daemon sur un poste de travail dépourvu de K3s, et surtout elle permet de dérouler l'intégralité du protocole de démarrage dans des tests automatisés, ce que nous détaillons dans le #ref(<chapter-tests>).
-Le choix entre les deux implémentations se fait par un simple paramètre de configuration.
+Le choix entre les deux implémentations s'opère par un simple paramètre de configuration.
 
 Rappelons enfin un point établi lors de la conception : antsd ne s'adresse jamais au K3s d'une autre machine.
 Chaque daemon ne pilote que l'instance qui s'exécute à côté de lui, et toute coordination entre machines passe exclusivement par Serf.
@@ -612,7 +629,7 @@ Cette règle évite de reconstruire dans antsd des mécanismes que K3s assure d�
 
 == Persistance de l'état local <section-implementation-persistence>
 
-Le daemon conserve sur disque une petite quantité d'informations, écrites au moment où le premier démarrage s'achève.
+Le daemon conserve sur disque une petite quantité d'informations, écrites au moment où le premier démarrage s'achève (#src("antsd/internal/node/persist.go")).
 
 Il n'y a pas besoin de persister l'état complet du cluster, car il est déjà maintenu par K3s et par Serf.
 K3s maintient son propre état dans sa base de données interne.
@@ -647,7 +664,7 @@ La solution naïve consisterait à importer ces deux paquets.
 Nous faisons l'inverse : `admin` déclare lui-même les deux interfaces dont il a besoin, comme le montre la #ref(<code_implementation_admin-interfaces>), et ce sont les autres paquets qui viennent les satisfaire.
 
 #hepia.sourced_figure(
-  caption: [Interfaces déclarées par le paquet d'administration],
+  caption: [Interfaces déclarées par le paquet d'administration (#src("antsd/internal/admin/server.go"))],
   label: <code_implementation_admin-interfaces>,
   supplement: [Code],
   ```go
@@ -670,14 +687,14 @@ Nous faisons l'inverse : `admin` déclare lui-même les deux interfaces dont il 
 )
 
 Le serveur HTTP ne dépend ainsi d'aucun des deux paquets qu'il utilise.
-Outre l'absence de cycle d'importation, cette inversion présente l'avantage de rendre explicite, en un seul endroit, la totalité de ce que l'interface d'administration est capable de faire sur le système.
+Outre l'absence de cycle d'importation, cette inversion présente l'avantage de rendre explicite, en un seul endroit, l'ensemble des opérations que l'interface d'administration peut déclencher sur le système.
 Toute nouvelle action devra passer par ces interfaces, ce qui constitue une barrière utile contre la tentation d'exposer directement des mécanismes internes.
 
 Le traitement des actions impossibles mérite également d'être mentionné.
 Lorsque l'utilisateur demande une action qui n'a pas de sens dans l'état courant, par exemple confirmer une création de cluster alors qu'aucune n'a été demandée, le gestionnaire renvoie une erreur particulière que le serveur reconnaît et traduit en un code HTTP 409, qui signale un conflit avec l'état de la ressource.
 L'appelant distingue ainsi une action refusée d'une véritable panne du daemon.
 
-Le tableau de bord, rendu à partir d'une template HTML, présente l'état local, la liste des membres connus avec leur état respectif, et les boutons correspondant aux actions disponibles.
+Le tableau de bord, rendu à partir d'une template HTML (#src("antsd/internal/admin/templates/dashboard.tmpl")), présente l'état local, la liste des membres connus avec leur état respectif, et les boutons correspondant aux actions disponibles.
 
 // TODO (figure) : décommenter une fois la capture d'écran réalisée
 // #hepia.sourced_figure(
@@ -695,7 +712,7 @@ Ils tiennent lieu des boutons de l'écran physique prévu sur les machines ANTS,
 Le chapitre précédent a exposé les raisons qui nous conduisent à préparer une image système complète et pré-configurée (voir #ref(<section-conception-ants-os>, supplement: [section])).
 Nous décrivons ici la manière dont cette image est effectivement construite.
 
-La construction repose sur Packer@hashicorp_hashicorppacker_2026 et sur une extension spécialisée dans les images ARM/*@mkaczanowski_packer_builder_arm_2026*/.
+La construction est décrite dans un unique fichier (#src("ants-os/ants-os.pkr.hcl")) et repose sur Packer@hashicorp_hashicorppacker_2026 ainsi que sur une extension spécialisée dans les images ARM/*@mkaczanowski_packer_builder_arm_2026*/.
 Cette extension part de l'image officielle de Raspberry Pi OS Lite pour l'architecture ARM64/*@raspberry_pi_operating_2026*/, l'agrandit à quatre gigaoctets afin de laisser la place aux ajouts, puis monte ses partitions pour y déposer des fichiers et y exécuter des commandes.
 
 Une difficulté se pose immédiatement : le poste de développement est une machine x86, alors que les commandes de configuration doivent s'exécuter dans un environnement ARM64.
@@ -703,7 +720,7 @@ Elle est résolue par l'émulation, l'extension exécutant les commandes à l'in
 Tout se déroule dans un conteneur Docker privilégié, ce qui évite d'installer sur le poste de développement les outils de manipulation d'images disque et les droits d'administration qu'ils exigent.
 
 Le contenu déposé dans l'image se répartit en deux catégories.
-La première regroupe les fichiers téléchargés au préalable par un script dédié, exécuté une seule fois : le binaire de K3s pour ARM64, son script d'installation officiel et l'archive de ses images de conteneurs.
+La première regroupe les fichiers téléchargés au préalable par un script dédié (#src("ants-os/scripts/download-assets.sh")), exécuté une seule fois : le binaire de K3s pour ARM64, son script d'installation officiel et l'archive de ses images de conteneurs.
 Cette archive est l'élément déterminant pour le fonctionnement hors ligne, car elle contient toutes les images que K3s doit démarrer.
 Placée à l'emplacement où K3s les recherche, elle lui évite tout accès à un registre distant.
 La seconde catégorie rassemble nos propres fichiers de configuration : la définition de l'interface réseau, la configuration du serveur SSH et la clé publique autorisée.
@@ -715,7 +732,7 @@ Le répertoire réservé sert donc de réserve intacte (appelé #emph("vault")),
 On utilise un lien pour accélérer l'opération et économiser de l'espace disque, car les fichiers sont volumineux.
 Si le lien est impossible, antsd recopie les fichiers à la place.
 
-Un script de configuration est ensuite exécuté à l'intérieur de l'image pour l'adapter à notre usage.
+Un script de configuration (#src("ants-os/scripts/provision.sh")) est ensuite exécuté à l'intérieur de l'image pour l'adapter à notre usage.
 Il fixe le nom de la machine et la disposition du clavier, puis crée l'utilisateur `ants` avec accès par clé et élévation de privilèges sans mot de passe.
 Cette création répond à un besoin précis : elle permet de désactiver l'assistant de première configuration de Raspberry Pi OS, qui exigerait sinon une intervention au clavier lors du tout premier démarrage, ce qui serait contraire à notre objectif.
 Le script installe ensuite quelques outils de diagnostic, ajuste les permissions des binaires, et bascule la gestion du réseau de NetworkManager vers `systemd-networkd`, plus adapté à une machine sans interface graphique et configurée par fichiers.
@@ -724,15 +741,13 @@ Une étape de ce script mérite une mention particulière, car son omission prov
 Le noyau de Raspberry Pi OS ne présente pas par défaut tous les groupes de contrôle dont Kubernetes a besoin pour limiter les ressources des conteneurs.
 Le script ajoute donc les options nécessaires à la ligne de commande du noyau, sans quoi K3s refuse simplement de démarrer, avec un message qui ne désigne pas immédiatement la cause.
 
-// La #ref(<fig_implementation_ants-os-build>) résume l'enchaînement complet, depuis le téléchargement des ressources jusqu'à la carte mémoire prête à être insérée dans une machine.
+La #ref(<fig_implementation_ants-os-build>) résume l'enchaînement complet, depuis le téléchargement des ressources jusqu'à la carte mémoire prête à être insérée dans une machine.
 
-// #hepia.sourced_figure(
-//   caption: [Chaîne de construction de l'image ants-os],
-//   label: <fig_implementation_ants-os-build>,
-//   image("../assets/diagrams/implementation_ants-os-build.svg"),
-// )
-// 
-#highlight("TODO : insérer diagramme de construction de l'image")
+#hepia.sourced_figure(
+  caption: [Chaîne de construction de l'image ants-os],
+  label: <fig_implementation_ants-os-build>,
+  image("../assets/diagrams/implementation_ants-os-build.svg", width: 90%),
+)
 
 // Un point de cette construction est provisoire et mérite d'être signalé, car il touche au produit final.
 // Dans le système livré, le binaire de antsd et le service systemd qui le démarre font partie de l'image, au même titre que K3s.

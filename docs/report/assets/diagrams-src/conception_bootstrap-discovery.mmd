@@ -21,7 +21,7 @@ flowchart TD
     M -->|Non| N["Attente de la demande\nde création de l'utilisateur"]
     N -->|Création confirmée| P
     P -->|"Un cluster étranger\ndevient joignable"| H
-    P --> Q["Calcul du rôle\npuis installation de k3s"]
+    P --> Q["Détermination du rôle\npuis installation de k3s"]
 
     classDef depart fill:#ECEFF1,stroke:#546E7A,color:#263238
     classDef etape fill:#BBDEFB,stroke:#0D47A1,color:#000

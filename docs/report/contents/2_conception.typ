@@ -9,10 +9,10 @@
 
 == Architecture générale <section-conception-architecture>
 
-  Afin de répondre aux différents besoins et contraintes énumérés précédemment, nous avons conçu une architecture cible pour notre solution. Pour commencer, partons d'une vue d'ensemble de ce système final. Dans la #ref(<fig_conception_layers>), nous avons représenté l'une de nos machines en quatre niveaux.
+  Afin de répondre aux différents besoins et contraintes énumérés précédemment, nous avons conçu une architecture cible pour notre solution. Pour commencer, partons d'une vue d'ensemble de ce système final. La #ref(<fig_conception_layers>) représente les quatre couches logicielles empilées sur chacune de nos machines.
 
 #hepia.sourced_figure(
-  caption: [Architecture d'une machine dans le cluster],
+  caption: [Pile des couches logicielles d'un nœud du cluster],
   label: <fig_conception_layers>,
   image("../assets/diagrams/conception_layers.svg"),
 )
@@ -27,24 +27,34 @@
 
 == ants-os <section-conception-ants-os>
 
-La base du système est une image ARM64 prête à l'emploi. 
-Pour le PoC, elle cible des Raspberry Pi 5, ce qui permet de tester la solution sur une plateforme simple et peu coûteuse, tout en restant proche des machines réelles de ANTS A.I. Systems. 
-L'image contient K3s, antsd, les images de conteneurs nécessaires pour un fonctionnement hors ligne, et un service systemd pour lancer antsd au démarrage. 
+La base du système est une image ARM64 prête à l'emploi.
+Pour le PoC, elle cible des Raspberry Pi 5/*@raspberry_pi_5*/, ce qui permet de tester la solution sur une plateforme simple et peu coûteuse, tout en restant proche des machines réelles de ANTS A.I. Systems, construites autour d'un module Nvidia Jetson Orin Nano/*@nvidia_jetson_orin_*/.
+Les deux plateformes partagent l'architecture ARM64 ainsi qu'un ordre de grandeur comparable de mémoire.
+La machine ANTS dispose en plus d'une puce destinée aux charges d'intelligence artificielle, que le Raspberry Pi n'a pas, mais celui-ci ne joue aucun rôle dans ce travail.
+La différence qui compte ici est le stockage : la machine ANTS embarque des disques NVMe, là où le Raspberry Pi démarre sur une carte mémoire nettement plus lente.
+La #ref(<fig_conception_ants-node>) montre l'une de ces machines, sa carte et le boîtier dans lequel elle est livrée.
+
+#hepia.sourced_figure(
+  caption: [Un nœud ANTS : la carte vue de dessus, vue de dessous, puis le boîtier du produit fini],
+  source: [ANTS A.I. Systems],
+  label: <fig_conception_ants-node>,
+  image("../assets/images/ants_board_and_housing_small.jpg"),
+)
+
 // Pendant le développement, antsd est en revanche déposé sur les machines par un autre moyen, car c'est la partie du système qui change le plus souvent.
 // Ce point sera détaillé dans le #ref(<chapter-tests>) dédié aux tests.
 
-Cette image est construite à l'avance avec HashiCorp Packer@hashicorp_hashicorppacker_2026. Ce choix évite une installation manuelle sur chaque machine, réduit les différences logicielles entre nœuds et enlève la dépendance au réseau lors du premier démarrage. 
-L'image contient le binaire K3s complet, les images de conteneurs requises pour fonctionner hors ligne, le binaire antsd avec sa
-configuration, ainsi qu'un service qui lance automatiquement le daemon au démarrage.
+Cette image est construite à l'avance avec HashiCorp Packer@hashicorp_hashicorppacker_2026. Ce choix évite une installation manuelle sur chaque machine, réduit les différences logicielles entre nœuds et enlève la dépendance au réseau lors du premier démarrage.
+Elle contient le binaire K3s complet, les images de conteneurs requises pour fonctionner hors ligne, le binaire antsd avec sa configuration, ainsi qu'un service systemd qui lance automatiquement le daemon au démarrage.
 Les outils de base restent aussi présents pour simplifier le diagnostic lors de la phase de développement.
 
-Le choix de Packer plutôt que d'autres outils tel que `rpi-image-gen` est motivé par sa capacité à créer des images pour différentes plateformes et architectures.
+Le choix de Packer plutôt que d'autres outils tel que `rpi-image-gen`/*@raspberrypi_rpi_image_gen*/ est motivé par sa capacité à créer des images pour différentes plateformes et architectures.
 
-En pratique, ants-os ne fait pas la logique du cluster. Il prépare simplement une machine propre, stable et identique aux autres, pour que antsd et K3s puissent démarrer de manière fiable.
+En pratique, ants-os n'implémente aucune logique de cluster. Il prépare simplement une machine propre, stable et identique aux autres, pour que antsd et K3s puissent démarrer de manière fiable.
 
 == ants daemon <section-conception-antsd>
 
-  Ants-daemon, aussi appelé `antsd`, est un daemon Go qui s'exécute sur chaque machine physique du cluster. Il est responsable de la gestion des machines, de leur découverte, de leur provisionnement et de la maintenance d'un état sain au sein du cluster. Il embarque un agent Serf, auquel il délègue la découverte des machines et la communication entre elles.
+  Ants-daemon, aussi appelé `antsd`, est un daemon écrit en Go qui s'exécute sur chaque machine physique du cluster. C'est le composant central de ce travail, et il porte à lui seul les responsabilités de la couche basse énumérées plus haut. Il embarque un agent Serf, auquel il délègue la découverte des machines et la communication entre elles.
   C'est lui qui remplace le rôle humain dans un cluster traditionnel, en automatisant les tâches complexes et manuelles.
 
   La #ref(<fig_conception_antsd-components>) illustre les composants internes du programme et leurs interactions. On peut par exemple y voir l'agent Serf, auquel une boucle d'événements est attachée pour réagir aux changements de topologie et autres événements du cluster.
@@ -111,7 +121,7 @@ Un cluster peut compter moins de machines que cela, et le système doit alors fo
 Les machines dont la position tombe dans ce quota deviennent servers, les autres deviennent agents.
 
 Les machines suivantes rejoignent alors le cluster selon leur position.
-Celles qui doivent devenir des servers le font une par une, dans l'ordre, car la base de données interne de K3s n'accepte qu'un ajout de membre à la fois. Celles qui deviennent des agents attendent que les servers attendus soient en place, puis rejoignent le cluster toutes ensemble.
+Celles qui doivent devenir des servers s'installent une par une, dans l'ordre, car la base de données interne de K3s n'accepte qu'un ajout de membre à la fois. Celles qui deviennent des agents attendent que les servers attendus soient en place, puis rejoignent le cluster toutes ensemble.
 
 La #ref(<fig_conception_bootstrap-sequence>) détaille cette deuxième partie du bootstrap. On y voit l'installation du premier nœud en mode initialisation, puis l'arrivée en série des autres servers, chacun attendant de voir le précédent devenir stable, et enfin celle de l'agent.
 Le tag Serf est ce qui porte cette information d'un nœud à l'autre.
