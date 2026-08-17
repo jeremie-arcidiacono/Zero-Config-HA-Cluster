@@ -70,9 +70,8 @@ const (
 	defaultLogLevel     = "debug"
 	defaultK3sInstaller = InstallerExec
 
-	defaultRescaleEnabled = true
-	//defaultEvictionGrace = 12 * time.Hour
-	defaultEvictionGrace      = 2 * time.Minute
+	defaultRescaleEnabled     = true
+	defaultEvictionGrace      = 12 * time.Hour
 	defaultRescaleSettleDelay = 30 * time.Second
 )
 
