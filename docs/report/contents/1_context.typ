@@ -6,6 +6,7 @@
 
 Ce premier chapitre présente le contexte dans lequel s'inscrit ce projet, et pose toutes les bases nécessaires à la compréhension de la problématique et de la solution proposée.
 Il revient sur de nombreuses notions déjà présentées dans le mémoire du projet de semestre@arcidiacono_systeme_2026, qui sont essentielles pour comprendre ce Travail de Bachelor qui en est la continuité.
+La lecture de ce précédent mémoire n'est pas indispensable, mais elle peut aider à mieux saisir certains points.
 
 Il est divisé en trois parties. Nous présentons d'abord Kubernetes et sa distribution K3s, puis Serf, les deux outils sur lesquels repose la solution.
 Ces deux présentations reviennent au passage sur les choix effectués lors du projet de semestre@arcidiacono_systeme_2026 et sur ce qui les a motivés.
