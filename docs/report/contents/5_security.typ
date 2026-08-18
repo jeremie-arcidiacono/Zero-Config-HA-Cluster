@@ -109,7 +109,7 @@ Deux précisions expliquent pourquoi ce constat n'est pas décliné davantage.
 La première tient à l'hypothèse de confiance posée plus haut, qui fait que fermer l'entrée referme du même coup toutes les conséquences ci-dessus.
 C'est aussi la raison pour laquelle l'identité des machines ne fait pas l'objet d'un constat séparé : une machine annonce elle-même son nom, et toute la répartition des rôles repose sur l'ordre lexicographique de ces noms, si bien que se nommer `aaa` suffit à prendre la tête de tous les classements, élection du coordinateur comprise.
 Sous l'hypothèse retenue, ce n'est pas une faiblesse en soi, mais une illustration de l'absence de défense en profondeur.
-La seconde est que la découverte mDNS n'est pas la porte du cluster : n'importe qui peut annoncer le service que nous recherchons, mais un pair découvert et incapable d'entrer dans le gossip échoue simplement à rejoindre.
+La seconde est que la découverte #acr("mDNS") n'est pas la porte du cluster : n'importe qui peut annoncer le service que nous recherchons, mais un pair découvert et incapable d'entrer dans le gossip échoue simplement à rejoindre.
 Le filtrage mis en place dans le paquet `discovery`, décrit dans la #ref(<section-implementation-serf>, supplement: [section]), relève de la robustesse et non de la sécurité, car il n'arrête aucun attaquant.
 
 === Secrets, stockage et image système
@@ -191,7 +191,7 @@ La rotation elle-même se pilote depuis le cluster, Serf diffusant la nouvelle c
 Toute la difficulté est ailleurs : d'où vient cette clé, et comment une machine neuve l'obtient.
 C'est l'objet de la #ref(<section-security-enrollment>, supplement: [section]), et c'est ce qui détermine si la mesure préserve le zéro-configuration ou le dégrade.
 
-Il faut en revanche résister à la tentation de sécuriser la découverte, car le protocole mDNS n'est pas conçu pour cela et une machine qui annonce un service qu'elle n'offre pas ne cause aucun dommage tant que l'étape suivante la refuse.
+Il faut en revanche résister à la tentation de sécuriser la découverte, car le protocole #acr("mDNS") n'est pas conçu pour cela et une machine qui annonce un service qu'elle n'offre pas ne cause aucun dommage tant que l'étape suivante la refuse.
 La découverte reste ouverte, le contrôle d'accès est au gossip.
 
 Nous pensons qu'une mesure complémentaire mérite d'être discuté car nous l'avons étudié, bien qu'elle s'avère peu utile si l'on considère que l'entrée du cluster est sécurisé et que l'on ne souhaite pas de défense en profondeur.

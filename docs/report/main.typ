@@ -42,12 +42,15 @@
     ],
   acronyms: (
     "HEPIA": ("Haute école du paysage, d'ingénierie et d'architecture"),
+    "HES-SO": ("Haute école spécialisée de Suisse Occidentale"),
     "SWIM": ("Scalable Weakly Consistent Infection-style Process Group Membership"),
     "DHCP": ("Dynamic Host Configuration Protocol"),
     "NTP": ("Network Time Protocol"),
     "VLAN": ("Virtual Local Area Network"),
     "CIS": ("Center for Internet Security"),
-    "TPM": ("Trusted Platform Module")
+    "TPM": ("Trusted Platform Module"),
+    "mDNS": ("Multicast DNS"),
+    "RPC": ("Remote Procedure Call"),
   ),
   figures_urls: urls,
   introduction: include("contents/introduction.typ"),

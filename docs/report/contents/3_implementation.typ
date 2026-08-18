@@ -37,7 +37,7 @@ Tout le code métier se trouve sous `internal/`.
 
 Le découpage en paquets suit les responsabilités identifiées lors de la conception, illustrées par le diagramme de composants de la #ref(<fig_conception_antsd-components>).
 Le paquet #pkg("cluster") contient le gestionnaire, c'est-à-dire l'orchestrateur central qui possède l'état du cycle de vie et enchaîne les étapes des différents scénarios.
-Le paquet #pkg("serfnode") encapsule l'instance Serf embarquée, et s'appuie sur le paquet #pkg("discovery") qui réalise la découverte des machines par mDNS.
+Le paquet #pkg("serfnode") encapsule l'instance Serf embarquée, et s'appuie sur le paquet #pkg("discovery") qui réalise la découverte des machines par #acr("mDNS").
 Le paquet #pkg("k3s") regroupe tout ce qui concerne l'installation, la surveillance et le contrôle de l'instance locale de K3s.
 Le paquet #pkg("admin") expose l'interface HTTP de supervision et de contrôle.
 Le paquet #pkg("config") rassemble la lecture et la validation des paramètres de démarrage.
@@ -71,7 +71,7 @@ La conception a établi que antsd embarque Serf sous forme de bibliothèque plut
 Voyons maintenant ce que cette décision implique concrètement.
 
 Le paquet `serfnode` construit lui-même la configuration de l'agent, l'instancie dans le processus de antsd, et récupère les événements directement sur un canal Go.
-Il n'y a donc ni port RPC, ni sérialisation, ni supervision d'un processus tiers : le cycle de vie de l'agent est celui du daemon.
+Il n'y a donc ni port #acr("RPC"), ni sérialisation, ni supervision d'un processus tiers : le cycle de vie de l'agent est celui du daemon.
 Ce paquet joue également le rôle de frontière entre la bibliothèque de HashiCorp et le reste de notre code.
 Plutôt que de laisser circuler les types de Serf dans tout le programme, il les traduit vers un type d'événement qui nous est propre, et n'expose qu'une poignée d'opérations : rejoindre des pairs, quitter le cluster, publier l'état local via les tags, diffuser un événement, et fournir une vue des membres connus.
 
@@ -93,10 +93,10 @@ Ce comportement est désactivé pour les événements de notre protocole de dém
 
 Reste la question de l'amorçage de la découverte.
 Serf sait entretenir un groupe de machines, mais il faut lui fournir l'adresse d'au moins un pair pour qu'il puisse le rejoindre, ce qui est incompatible avec notre objectif de zéro-configuration.
-Le projet de semestre@arcidiacono_systeme_2026 avait choisi de s'appuyer sur la fonctionnalité native de découverte mDNS de Serf qui répond précisément à ce besoin.
+Le projet de semestre@arcidiacono_systeme_2026 avait choisi de s'appuyer sur la fonctionnalité native de découverte #acr("mDNS") de Serf qui répond précisément à ce besoin.
 Des tests avaient montré que cette fonctionnalité fonctionnait correctement, mais ils n'ont porté que sur la version standalone de Serf, et non sur la version embarquée dans un programme.
-Or, la fonctionnalité mDNS de Serf n'existe en réalité pas dans le coeur de la librairie, mais dans le paquet annexe qui est propre à l'outil en ligne de commande.
-Cet imprévu nous oblige donc à réimplémenter la découverte mDNS dans notre code.
+Or, la fonctionnalité #acr("mDNS") de Serf n'existe en réalité pas dans le coeur de la librairie, mais dans le paquet annexe qui est propre à l'outil en ligne de commande.
+Cet imprévu nous oblige donc à réimplémenter la découverte #acr("mDNS") dans notre code.
 
 C'est le rôle du paquet #pkg("discovery") (#src("antsd/internal/discovery/mdns.go")), qui s'appuie sur la bibliothèque mDNS de HashiCorp@hashicorp_hashicorpmdns_2026.
 Puisque Serf utilise lui-même cette bibliothèque dans sa version standalone en ligne de commande, nous nous inspirons de son code pour construire notre propre implémentation.
@@ -111,7 +111,7 @@ Le mécanisme est en place, mais il faut préciser que ce nom est pour l'instant
 
 Ce cloisonnement a par ailleurs révélé qu'il ne fonctionnait que dans un seul sens.
 Donner un nom précis à nos requêtes garantit que les autres n'y répondent pas, mais ne garantit rien sur ce que nous recevons : la bibliothèque mDNS analyse tous les enregistrements qui circulent sur le groupe de diffusion, et pas seulement les réponses à notre propre requête.
-De ce fait, si d'autres machines ou d'autres services annoncent leur présence via mDNS ou d'autres protocoles de découverte similaire, nous les recevons également.
+De ce fait, si d'autres machines ou d'autres services annoncent leur présence via #acr("mDNS") ou d'autres protocoles de découverte similaire, nous les recevons également.
 Cela s'est notamment produit à cause d'un service interne à K3s, et antsd tentait donc de rejoindre des adresses qui n'avaient rien à voir avec notre système.
 Le filtrage doit donc être appliqué correctement pour éviter ce problème.
 
