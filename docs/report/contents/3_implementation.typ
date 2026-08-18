@@ -494,16 +494,6 @@ La cible est l'agent au plus petit nom pour une promotion, et le serveur au plus
 
 La machine désignée désinstalle alors son K3s et le réinstalle avec l'autre rôle.
 
-// TODO : ne pas parler de ca ici, mais plutot dans la partie ants-os
-// C'est ici que le fonctionnement hors-ligne, décrit dans la #ref(<section-implementation-k3s>, supplement: [section]), se rappelle brutalement au concepteur : les scripts de désinstallation de K3s suppriment le binaire ainsi que l'intégralité du répertoire de données, archive d'images embarquées comprise.
-// Or ce sont exactement les deux fichiers dont la réinstallation a besoin pour se passer d'Internet.
-// Toute conversion aurait donc laissé derrière elle une machine incapable de réinstaller quoi que ce soit.
-
-// La correction ne consiste pas à sauvegarder ces fichiers autour de la désinstallation, mais à ne plus dépendre de ce qu'une installation précédente a laissé derrière elle.
-// L'image système range désormais une copie intacte de ces assets dans un emplacement auquel K3s ne touche jamais, et antsd les remet en place, par lien physique, avant chaque installation, qu'il s'agisse d'un bootstrap, d'un joining ou d'une conversion.
-// Le chemin d'installation devient ainsi autosuffisant, ce qui est la propriété que l'on voulait, et le contournement qui existait dans nos scripts de déploiement disparaît.
-
-
 === Portée d'un échec
 
 Le traitement des échecs distingue deux situations.
@@ -755,8 +745,9 @@ La seconde catégorie rassemble nos propres fichiers de configuration : la défi
 
 Le binaire de K3s et cette archive ne sont toutefois pas simplement copiés à l'endroit où le logiciel les attend.
 Ils sont d'abord rangés dans un répertoire qui n'appartient qu'à nous, puis reliés à leur emplacement d'exécution par un lien physique.
-Ce détour répond au problème décrit dans la #ref(<section-implementation-rescaling>, supplement: [section]) : la désinstallation de K3s efface les deux fichiers dont une réinstallation hors ligne a besoin.
-Le répertoire réservé sert donc de réserve intacte (appelé #emph("vault")), à laquelle K3s ne touche jamais, et que antsd recopie avant chaque installation.
+Ce détour répond à une contrainte de la conversion de rôle décrite dans la #ref(<section-implementation-rescaling>, supplement: [section]) : la désinstallation de K3s efface le binaire ainsi que l'intégralité du répertoire de données, archive d'images comprise, c'est-à-dire exactement ce dont une réinstallation hors ligne a besoin.
+Toute conversion aurait donc laissé derrière elle une machine incapable de réinstaller quoi que ce soit.
+Le répertoire réservé sert donc de coffre (#emph("vault") dans le code), auquel K3s ne touche jamais, et que antsd remet en place avant chaque installation, qu'il s'agisse d'un bootstrap, d'un joining ou d'une conversion.
 On utilise un lien pour accélérer l'opération et économiser de l'espace disque, car les fichiers sont volumineux.
 Si le lien est impossible, antsd recopie les fichiers à la place.
 

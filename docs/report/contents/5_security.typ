@@ -136,7 +136,7 @@ Une clé publique SSH commune est également intégrée à l'image, en l'occurre
 La configuration SSH mérite en revanche d'être signalée comme correcte et renforcée, avec une authentification par clé uniquement, sans connexion root ni mot de passe.
 
 Le cinquième (`SEC-05`) n'est pas une faiblesse mais une contrainte à établir : antsd ne peut pas être confiné au-delà d'un certain point.
-Le daemon écrit dans `/usr/local/bin` lorsqu'il restaure les fichiers de K3s depuis le coffre de l'image (voir #highlight("TODO: mettre ref vers chapitre")) ainsi que dans `/var/lib/rancher`, le script d'installation qu'il lance écrit son unit dans `/etc/systemd/system`, et il pilote systemd.
+Le daemon écrit dans `/usr/local/bin` lorsqu'il restaure les fichiers de K3s depuis le coffre de l'image (voir #ref(<section-implementation-ants-os>, supplement: [section])) ainsi que dans `/var/lib/rancher`, le script d'installation qu'il lance écrit son unit dans `/etc/systemd/system`, et il pilote systemd.
 Il restera donc un processus privilégié disposant d'un accès en écriture à des emplacements sensibles.
 
 === K3s, charges hébergées et interface d'administration
