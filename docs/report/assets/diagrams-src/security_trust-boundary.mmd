@@ -1,0 +1,33 @@
+---
+config:
+  flowchart:
+    htmlLabels: false
+    nodeSpacing: 45
+    rankSpacing: 70
+  htmlLabels: false
+  theme: base
+---
+flowchart BT
+    Reseau["Machine inconnue\nbranchée sur le réseau local"]
+    Pod["Charge applicative\néchappée de son conteneur"]
+
+    subgraph cluster["Machines du cluster ANTS"]
+        Basse["Couche basse : antsd et Serf\ngossip en clair, aucun secret exigé"]
+        Haute["Couche haute : K3s\nAPI et base de données,\nadhésion protégée par un token"]
+        Basse ~~~ Haute
+    end
+
+    Reseau ==> Basse
+    Pod ==> Basse
+    Reseau -.-> Haute
+    Pod -.-> Haute
+
+    classDef protege fill:#C8E6C9,stroke:#1B5E20,stroke-width:2px,color:#000
+    classDef ouvert fill:#FFCDD2,stroke:#B71C1C,stroke-width:2px,color:#000
+    classDef attaquant fill:#ECEFF1,stroke:#546E7A,color:#263238
+
+    class Haute protege
+    class Basse ouvert
+    class Reseau,Pod attaquant
+
+    style cluster fill:#FAFAFA,stroke:#9E9E9E,stroke-dasharray: 5 5

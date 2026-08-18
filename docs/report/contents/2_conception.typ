@@ -35,7 +35,7 @@ La différence qui compte ici est le stockage : la machine ANTS embarque des dis
 La #ref(<fig_conception_ants-node>) montre l'une de ces machines, sa carte et le boîtier dans lequel elle est livrée.
 
 #hepia.sourced_figure(
-  caption: [Un nœud ANTS : la carte vue de dessus, vue de dessous, puis le boîtier du produit fini],
+  caption: [Prototype d'un nœud ANTS : la carte vue de dessus, vue de dessous, puis le boîtier du produit fini],
   source: [ANTS A.I. Systems],
   label: <fig_conception_ants-node>,
   image("../assets/images/ants_board_and_housing_small.jpg"),

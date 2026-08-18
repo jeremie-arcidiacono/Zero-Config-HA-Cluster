@@ -45,6 +45,9 @@
     "SWIM": ("Scalable Weakly Consistent Infection-style Process Group Membership"),
     "DHCP": ("Dynamic Host Configuration Protocol"),
     "NTP": ("Network Time Protocol"),
+    "VLAN": ("Virtual Local Area Network"),
+    "CIS": ("Center for Internet Security"),
+    "TPM": ("Trusted Platform Module")
   ),
   figures_urls: urls,
   introduction: include("contents/introduction.typ"),
@@ -56,5 +59,6 @@
 #include("contents/1_context.typ")
 #include("contents/2_conception.typ")
 #include("contents/3_implementation.typ")
-#include("contents/4_security.typ")
-#include("contents/5_results.typ")
+#include("contents/4_tests.typ")
+#include("contents/5_security.typ")
+#include("contents/6_results.typ")
