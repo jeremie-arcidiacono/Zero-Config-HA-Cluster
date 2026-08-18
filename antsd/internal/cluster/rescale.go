@@ -184,8 +184,12 @@ func (m *Manager) maybeRescale(view clusterView) {
 	}
 
 	settled, imbalanceDeadline := m.trackImbalance(view, now)
-	if settled && m.startConversion(view) {
-		return
+	if settled {
+		if m.startConversion(view) {
+			return
+		}
+		// Nothing convertible yet: the deadline is already past, planning a new check on it would spin.
+		imbalanceDeadline = now.Add(m.rescaleSettleDelay)
 	}
 	m.scheduleRescaleCheck(earliest(nextEvictionDeadline, imbalanceDeadline), now)
 }
