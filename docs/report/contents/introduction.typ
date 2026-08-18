@@ -41,7 +41,7 @@ Les messages de commit suivent la convention #emph("Conventional Commits")@conve
 Différents modèles d'IA conversationnels ont été employés durant ce projet, principalement les modèles de Claude et Gemini, utilisés via la plateforme Perplexity@perplexity_perplexity_2026, ainsi que celle de Claude directement@anthropic_ai_2026.
 Ils ont servi à trois usages.
 Le premier est la recherche documentaire, pour obtenir une synthèse d'une documentation ou d'un code source tiers.
-Le deuxième est la rédaction, pour la reformulation de certains passages de ce mémoire et la relecture orthographique.
+Le deuxième est la rédaction, pour la reformulation de certains passages de ce mémoire, la relecture orthographique et l'amélioration du visuel (par exemple les couleurs) des diagrammes.
 Le troisième est le développement, pour produire du code, en particulier sur les aspects "aide au développement" comme les tests automatisés et les playbooks Ansible, et pour obtenir une relecture critique du code écrit.
 L'architecture, les décisions de conception et la structure de ce document n'ont en revanche pas été délégués.
 Le code et le texte générés ont été systématiquement relus.

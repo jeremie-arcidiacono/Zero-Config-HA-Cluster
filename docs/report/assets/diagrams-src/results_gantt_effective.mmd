@@ -1,0 +1,70 @@
+---
+config:
+  htmlLabels: false
+  theme: base
+  themeVariables:
+    taskBkgColor: "#BBDEFB"
+    taskBorderColor: "#0D47A1"
+    taskTextColor: "#263238"
+    taskTextOutsideColor: "#263238"
+    sectionBkgColor: "#546E7A"
+    sectionBkgColor2: "#546E7A"
+    altSectionBkgColor: "#FFFFFF"
+    excludeBkgColor: "#F5F5F5"
+    todayLineColor: "#B71C1C"
+    titleColor: "#263238"
+  themeCSS: ".grid .tick line { stroke: #B0BEC5; }"
+---
+gantt
+    title Zero-Config HA Cluster - Effectif
+    dateFormat YYYY-MM-DD
+    axisFormat %d%b
+    excludes weekends
+    weekday monday
+    tickInterval 1week
+    todayMarker off
+
+    section Préparation
+        Planification des taches: p1, 2026-05-20, 2026-05-27
+        Conception de l'architecture: p2, 2026-05-25, 2026-06-17
+        Réception des machines: p3, 2026-06-02, 4d
+
+    section Mémoire
+        Rédaction énoncé: m1, 2026-05-14, 2026-05-22
+        Rédaction mémoire: m2, 2026-06-17, 2026-08-19
+        Rendu intermédiaire: milestone, m3, 2026-06-29, 0d
+        Rendu pour relecture: milestone, m4, 2026-08-10, 0d
+        Rendu final: milestone, m5, 2026-08-19, 0d
+    %%    section CI/CD
+
+    section Système d'exploitation
+    %%        Sélection distro & paquets: o1, 2026-06-01, 1d
+        Config de base (réseau, boot): o2, 2026-06-03, 2026-06-24
+        Intégration antsd, Serf et K3s dans l'OS: o3, 2026-06-05, 1d
+        Procédure de build et flash: o4, 2026-06-03, 2026-06-16
+        Coffre d'assets air-gap dans l'image: o5, 2026-08-05, 2026-08-07
+    %%        OS image build pipeline: o5, after o4, 5d
+    %%        Finalisation de l'image OS: o6, after o4, 2026-08-19
+
+    section antsd
+        Setup projet: a1, 2026-06-29, 2d
+        Découverte initiale Serf: a2, 2026-06-30, 2d
+        Discovery mDNS: a3, 2026-07-01, 2d
+        Http dashboard: a4, 2026-07-14, 2026-07-16
+        Logique 1er démarrage => bootstrapping: a7, 2026-07-20, 2026-07-27
+        Logique redémarrage => rejoin cluster: a10, 2026-07-29, 2026-08-02
+        Logique 1er démarrage => join cluster existant: a12, 2026-08-02, 2026-08-05
+        Protocole forget-me: a15, 2026-08-12, 2026-08-16
+
+    section Déploiement et outillage
+        Setup Ansible (inventaire, deploy antsd): dep1, 2026-07-05, 2026-07-12
+        Playbook helpers (logs, shutdown, wipe): dep2, 2026-07-16, 2026-07-19
+        App de test hello-world K3s: dep3, 2026-07-29, 1d
+
+    section Résilience
+        Protocole de redimensionnement: r1, 2026-08-04, 2026-08-12
+        Fiabilisation du redimensionnement: r2, 2026-08-14, 2026-08-17
+        Tests PoC et simulation de pannes: r3, 2026-08-10, 2026-08-18
+
+    section Sécurité
+        Investigation: s1, 2026-08-05, 2026-08-15
