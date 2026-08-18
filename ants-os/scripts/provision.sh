@@ -9,7 +9,7 @@ VAULT_DIR=/usr/lib/ants/k3s
 AIRGAP_IMAGES=k3s-airgap-images-arm64.tar.zst
 
 step=1
-total_steps=12
+total_steps=13
 echo_step() {
     echo "=====> [$step/$total_steps] $1"
     step=$((step + 1))
@@ -68,6 +68,15 @@ chmod 600 /etc/ssh/sshd_config.d/00-ants-hardening.conf
 # Remove userconf-pi SSH banner, irrelevant since we provision a custom user directly
 rm -f /etc/ssh/sshd_config.d/rename_user.conf
 rm -f /usr/share/userconf-pi/sshd_banner
+
+echo_step "Keep the systemd journal across reboots"
+# By default, Storage=volatile is used to spare the SD card, which erases the logs on every reboot.
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/50-ants-persistent.conf << 'EOF'
+[Journal]
+Storage=persistent
+SystemMaxUse=300M
+EOF
 
 echo_step "Store the k3s air-gap assets in the vault"
 # The k3s uninstall script deletes /usr/local/bin/k3s and remove the whole /var/lib/rancher/k3s
