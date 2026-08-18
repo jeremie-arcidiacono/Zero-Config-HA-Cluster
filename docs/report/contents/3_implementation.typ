@@ -707,6 +707,34 @@ Le tableau de bord, rendu à partir d'une template HTML (#src("antsd/internal/ad
 Il faut rappeler que ces points d'accès ont, dans leur forme actuelle, un statut provisoire.
 Ils tiennent lieu des boutons de l'écran physique prévu sur les machines ANTS, décrit lors de la conception, et permettent de dérouler le protocole de démarrage pendant le développement sans disposer de cet écran.
 
+== Le décommissionnement <section-implementation-decommission>
+
+Un point d'accès de plus était prévu et ne figure pas dans cette liste  : le décommissionnement, c'est-à-dire le retrait volontaire et définitif d'une machine que son propriétaire souhaite sortir du cluster, pour la remplacer ou s'en séparer.
+Cette action ne fait pas partie de l'énoncé du travail, qui demande la formation du cluster, la haute disponibilité et la récupération après défaillance.
+Elle a été ajoutée au périmètre en cours de projet, à la demande de ANTS A.I. Systems, et nous avons décidé de ne pas la réaliser.
+La priorité est allée aux autres points essentiels (mécanismes de réparation, comportement lorsque plusieurs machines agissent en même temps, tests, etc.), qui touchent tous à la disponibilité du produit là où le décommissionnement touche à son confort d'exploitation.
+Cet arbitrage a été discuté lors des rendez-vous de suivi du projet.
+
+Ce choix est tenable parce que le résultat visé reste atteignable sans commande dédiée.
+L'utilisateur qui veut retirer une machine la débranche, et le cluster fait le reste : la machine est déclarée perdue, évincée à l'expiration de la période de grâce, puis le redimensionnement recalcule le nombre de serveurs comme après n'importe quelle panne.
+Le chemin est simplement moins direct, à savoir qu'il impose l'attente de la période de grâce, et exige la réinitialisation que celle-ci avant d'être réutilisée ailleurs.
+L'absence de cette commande coûte donc du temps et une manipulation, mais elle ne prive le système d'aucune capacité.
+
+La conception de ce retrait a néanmoins été menée, et elle ne demanderait presque aucun mécanisme nouveau.
+Le point d'accès `POST /decommission` serait traduit en commande comme les trois actions existantes, et ferait passer la machine dans un état de retrait.
+Celle-ci ne peut cependant pas se supprimer elle-même du cluster, puisqu'un agent ne dispose d'aucun droit d'administration sur K3s, pour la raison exposée dans la #ref(<section-implementation-k3s>, supplement: [section]).
+Elle diffuserait donc une demande au groupe et attendrait la réponse, exactement comme le fait déjà une machine réinitialisée avec le protocole d'oubli présenté dans la #ref(<part-implementation-forget-me>, supplement: [partie]).
+Le coordinateur du redimensionnement traiterait cette demande avec le code qui exécute aujourd'hui les évictions, c'est-à-dire vider la machine de ses charges puis supprimer son objet dans K3s.
+La machine ne désinstallerait son K3s, n'effacerait son fichier d'état et n'annoncerait son départ à Serf qu'une fois cette confirmation reçue, ce qui la laisserait vierge et directement réutilisable.
+
+Deux points empêchent toutefois de réduire ce travail à un simple assemblage, et tous deux sont déjà identifiés.
+Le premier est l'endroit où le départ d'un serveur doit être sérialisé avec les autres changements de composition de la base de données interne.
+La machine qui attend sa confirmation ne doit surtout pas rejoindre pour cela la liste des états décrite dans la #ref(<part-implementation-advisory>, supplement: [partie]), et ce pour la raison qui en tient déjà le protocole d'oubli à l'écart : une attente sans échéance placée dans cette liste gèlerait les réparations du cluster entier.
+La sérialisation revient donc au coordinateur, qui est déjà seul à agir et dont le tour vérifie le quorum avant toute chose, puisque c'est lui qui exécute réellement le retrait.
+Le second point tient au signal que les autres machines doivent observer.
+Un départ annoncé produit le statut Serf `left`, réservé depuis le début à cet usage précis, mais l'éviction pousse elle aussi un événement de départ juste avant d'effacer la machine du groupe.
+La logique de décommissionnement devra donc s'appuyer sur le statut lu dans la liste des membres, et jamais sur l'arrivée de cet événement, faute de quoi une machine évincée serait traitée comme une machine partie volontairement.
+
 == Construction de l'image ants-os <section-implementation-ants-os>
 
 Le chapitre précédent a exposé les raisons qui nous conduisent à préparer une image système complète et pré-configurée (voir #ref(<section-conception-ants-os>, supplement: [section])).
@@ -766,6 +794,7 @@ La troisième est le recours à des interfaces aux frontières du système, enve
 
 Les quatre situations qu'une machine peut rencontrer sont couvertes : créer un cluster, rejoindre un cluster déjà en service, revenir après un redémarrage, et changer de rôle quand la population évolue.
 Le cluster ne se contente donc pas de se former, il se maintient.
+Seul le décommissionnement d'une machine reste à implémenter.
 
 
 Il reste maintenant à vérifier que tout ceci se comporte comme prévu sur du matériel réel, et surtout à observer ce qui se passe lorsque des machines tombent.
