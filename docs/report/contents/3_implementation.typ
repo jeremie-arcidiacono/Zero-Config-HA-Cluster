@@ -686,13 +686,15 @@ L'appelant distingue ainsi une action refusée d'une véritable panne du daemon.
 
 Le tableau de bord, rendu à partir d'une template HTML (#src("antsd/internal/admin/templates/dashboard.tmpl")), présente l'état local, la liste des membres connus avec leur état respectif, et les boutons correspondant aux actions disponibles.
 
-// TODO (figure) : décommenter une fois la capture d'écran réalisée
-// #hepia.sourced_figure(
-//   caption: [Tableau de bord de supervision exposé par antsd],
-//   label: <fig_implementation_dashboard>,
-//   image("../assets/images/implementation_dashboard.png"),
-// )
-#highlight("TODO : insérer ici une capture d'écran du tableau de bord")
+#hepia.sourced_figure(
+  caption: [Capture d'écran du tableau de bord d'administration],
+  label: <fig_implementation_dashboard>,
+  image("../assets/images/implementation_screenshot_dashboard.png"),
+)
+
+La capture d'écran de la #ref(<fig_implementation_dashboard>) présente le tableau de bord d'une machine nommée `ants06`, dans un cluster de trois serveurs et un agent.
+On voit que la machine est un agent, qu'elle a démarré il y a 8 minutes, et que l'état du cluster est stable.
+On y voit par ailleurs que le cluster n'arrive plus à joindre la machine `ants05`, qui est donc en panne.
 
 Il faut rappeler que ces points d'accès ont, dans leur forme actuelle, un statut provisoire.
 Ils tiennent lieu des boutons de l'écran physique prévu sur les machines ANTS, décrit lors de la conception, et permettent de dérouler le protocole de démarrage pendant le développement sans disposer de cet écran.
