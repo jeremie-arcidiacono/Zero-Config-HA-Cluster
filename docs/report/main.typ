@@ -55,7 +55,9 @@
   figures_urls: urls,
   introduction: include("contents/introduction.typ"),
   conclusion: include("contents/conclusion.typ"),
-  appendixes: (),
+  appendixes: (
+    include "contents/annexe_antsd-states.typ",
+  ),
   bibliography-bytes: read("bibliography.bib", encoding: none)
 )
 

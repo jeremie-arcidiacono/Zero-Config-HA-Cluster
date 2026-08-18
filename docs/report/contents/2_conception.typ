@@ -138,6 +138,7 @@ Une fois cette phase terminée, antsd enregistre l'état local nécessaire pour 
 === Cycle de vie d'une machine
 
 Le comportement de antsd tout au long du cycle de vie de la machine est représenté sous la forme d'une machine d'états. La #ref(<fig_conception_antsd-state-machine>) en donne les états et les transitions, du démarrage de la machine jusqu'à son arrêt. Le redimensionnement n'y figure que comme une boîte, car il demande une figure à lui seul, présentée plus bas.
+Pour rester lisible, elle ne montre pas tous les états, mais une liste complète (tel qu'implémenté dans antsd) est donnée dans l'#ref(<annexe-antsd-states>).
 
 #hepia.sourced_figure(
   caption: [Cycle de vie d'une machine, hors redimensionnement],
