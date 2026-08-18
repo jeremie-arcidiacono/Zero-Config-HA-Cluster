@@ -59,7 +59,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
 
 echo_step "Set binaries permissions"
 chmod 755 /usr/local/bin/install-k3s.sh
-# chmod 755 /usr/local/bin/antsd
+chmod 755 /usr/local/bin/antsd
 
 echo_step "Setup SSH server"
 systemctl enable ssh
@@ -102,8 +102,11 @@ systemctl disable NetworkManager || true
 systemctl enable systemd-networkd
 chmod 644 /etc/systemd/network/10-eth0.network
 
-echo_step "Enable antsd"
-systemctl enable antsd || true
+echo_step "Configure and enable antsd"
+mkdir -p /etc/antsd
+mv /tmp/antsd.env /etc/antsd/antsd.env
+chmod 600 /etc/antsd/antsd.env
+systemctl enable antsd
 
 echo_step "Apt cleanup to reduce image size"
 apt clean

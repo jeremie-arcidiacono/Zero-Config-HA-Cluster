@@ -1,0 +1,29 @@
+[Unit]
+Description=ANTS Daemon:  Serf-based cluster management agent
+Documentation=https://github.com/jeremie-arcidiacono/Zero-Config-HA-Cluster
+After=network-online.target
+Wants=network-online.target
+
+StartLimitIntervalSec=60s
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+ExecStart=/usr/local/bin/antsd
+EnvironmentFile=-/etc/antsd/antsd.env
+
+Restart=on-failure
+RestartSec=5s
+
+# No sandboxing: installing K3s writes /usr/local/bin, /etc and /var/lib.
+# See SEC-05 in security documentation.
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=antsd
+
+[Install]
+WantedBy=multi-user.target

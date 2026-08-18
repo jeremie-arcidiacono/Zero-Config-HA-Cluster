@@ -90,6 +90,7 @@ build {
   provisioner "file" {
     sources = [
       "assets/install-k3s.sh",
+      "assets/antsd"
     ]
     destination = "/usr/local/bin/"
   }
@@ -99,16 +100,15 @@ build {
     destination = "/tmp/k3s-airgap-images-arm64.tar.zst"
   }
 
-  # provisioner "file" {
-  #   sources = "assets/antsd"
-  #   destination = "/usr/local/bin/"
-  # }
-
   # 2. Copy configuration files
-  # provisioner "file" {
-  #   source      = "files/systemd/antsd.service"
-  #   destination = "/etc/systemd/system/antsd.service"
-  # }
+  provisioner "file" {
+    source      = "files/systemd/antsd.service"
+    destination = "/etc/systemd/system/antsd.service"
+  }
+  provisioner "file" {
+    source      = "files/antsd/antsd.env"
+    destination = "/tmp/antsd.env"
+  }
 
   provisioner "file" {
     source      = "files/network/10-eth0.network"
