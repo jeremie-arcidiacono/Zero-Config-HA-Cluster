@@ -448,6 +448,10 @@ Toutes les machines évaluent le cluster à chaque événement Serf, mais une se
 Le procédé est le même que pour l'élection de rôle du bootstrap, et il en tire le même avantage : chaque machine dérive le même coordinateur de la même liste de membres, sans échange préalable ni élection.
 Si ce coordinateur disparaît en cours de réparation, la machine suivante reprend le tour et refait le travail depuis une observation fraîche, ce qui suppose que chacune de ses étapes soit reproductible sans effet supplémentaire (idempotent).
 
+Cette élection a une faiblesse qu'il faut traiter explicitement, car elle est calculée sur la vue Serf locale : une machine coupée du réseau se voit seule serveur vivant, s'élit donc elle-même, et lit toutes les autres comme durablement perdues.
+Chaque tour de coordination commence pour cette raison par une lecture de la vue Kubernetes, qui sépare les deux côtés d'une coupure, puisque la base de données interne n'accepte aucune lecture sans quorum.
+Une machine restée minoritaire n'obtient donc pas de réponse, abandonne son tour sans avoir rien tenté, et le retentera plus tard.
+
 Il n'existe volontairement aucun verrou propre au redimensionnement.
 La sérialisation est assurée par le mécanisme qui existe déjà pour les ajouts de serveurs : chaque machine publie son état dans son tag Serf, et le coordinateur s'abstient tant qu'une autre annonce une opération modifiant à la composition de la base de données interne de K3s.
 Le redimensionnement, le bootstrap et la reprise après redémarrage se sérialisent donc les uns par rapport aux autres sans mécanisme supplémentaire, ce qui est exactement la propriété recherchée : cette base n'admet qu'un changement de membres à la fois.
