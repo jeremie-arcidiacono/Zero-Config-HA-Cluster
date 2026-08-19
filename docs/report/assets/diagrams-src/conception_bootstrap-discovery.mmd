@@ -3,11 +3,20 @@ config:
   flowchart:
     htmlLabels: false
     nodeSpacing: 50
-    rankSpacing: 28
+    rankSpacing: 55
   htmlLabels: false
   theme: base
   themeVariables:
     edgeLabelBackground: "#FFFFFF"
+  themeCSS: |
+    .edgeLabel rect {
+      fill: #FFFFFF !important;
+      opacity: 1 !important;
+      stroke: #CFD8DC !important;
+      stroke-width: 1px !important;
+      rx: 3px !important;
+      ry: 3px !important;
+    }
 ---
 flowchart TD
     A([Nœud démarre, démarrage de antsd]) -->D["Découverte mDNS\net lecture des états des membres"]

@@ -8,6 +8,15 @@ config:
   theme: base
   themeVariables:
     edgeLabelBackground: "#FFFFFF"
+  themeCSS: |
+    .edgeLabel rect {
+      fill: #FFFFFF !important;
+      opacity: 1 !important;
+      stroke: #CFD8DC !important;
+      stroke-width: 1px !important;
+      rx: 3px !important;
+      ry: 3px !important;
+    }
 ---
 flowchart TD
     START([Démarrage]) --> starting[starting]
