@@ -1,5 +1,17 @@
 
-.PHONY: ping init deploy force-restart
+.PHONY: help ping shutdown init deploy force-restart wipe hello-world hello-world-check hello-world-delete
+
+help:
+	@echo "Available commands:"
+	@echo "  ping               - Ping all hosts"
+	@echo "  shutdown           - Shutdown all hosts"
+	@echo "  init               - Run initialization playbook"
+	@echo "  deploy             - Deploy ants-daemon"
+	@echo "  force-restart      - Force restart ants-daemon"
+	@echo "  wipe               - Uninstall k3s and reset antsd state on all hosts"
+	@echo "  hello-world        - Deploy the hello-world test app on k3s and verify it"
+	@echo "  hello-world-check  - Re-verify the hello-world app"
+	@echo "  hello-world-delete - Remove the hello-world test app"
 
 ping:
 	ansible all -m ping
@@ -15,3 +27,15 @@ deploy:
 
 force-restart:
 	ansible-playbook playbooks/deploy-antsd.yml --tags force-restart
+
+wipe:
+	ansible-playbook playbooks/wipe.yml
+
+hello-world:
+	ansible-playbook playbooks/hello-world.yml
+
+hello-world-check:
+	ansible-playbook playbooks/hello-world.yml --tags check
+
+hello-world-delete:
+	ansible-playbook playbooks/hello-world.yml -e hello_world_state=absent

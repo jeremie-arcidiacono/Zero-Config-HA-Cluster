@@ -1,0 +1,85 @@
+---
+# Reset every node to its pre-bootstrap state: uninstall k3s and drop the antsd
+# state file, so the next run starts from a clean first boot.
+#
+# This playbook should replace a reflash of the SD card or a factory reset.
+- name: Wipe k3s and antsd state
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    k3s_bin: /usr/local/bin/k3s
+    k3s_images_dir: /var/lib/rancher/k3s/agent/images
+    k3s_uninstall_script: /usr/local/bin/k3s-uninstall.sh
+    k3s_agent_uninstall_script: /usr/local/bin/k3s-agent-uninstall.sh
+    vault_dir: /usr/lib/ants/k3s
+    antsd_state_dir: /var/lib/antsd
+  tasks:
+    - name: Stop antsd
+      ansible.builtin.systemd_service:
+        name: antsd
+        state: stopped
+
+    # Only one of the two scripts exists.
+    # It deletes itself once done: "removes" makes each task a no-op when its script is absent.
+    - name: Run the k3s server uninstall script
+      ansible.builtin.command:
+        cmd: "{{ k3s_uninstall_script }}"
+        removes: "{{ k3s_uninstall_script }}"
+
+    - name: Run the k3s agent uninstall script
+      ansible.builtin.command:
+        cmd: "{{ k3s_agent_uninstall_script }}"
+        removes: "{{ k3s_agent_uninstall_script }}"
+
+    # Whatever the uninstall script did or skipped, these must be gone.
+    - name: Remove any k3s state left behind
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/rancher/k3s/server
+        - /etc/rancher/k3s
+        - /etc/systemd/system/k3s.service
+        - /etc/systemd/system/k3s.service.env
+        - /etc/systemd/system/k3s-agent.service
+        - /etc/systemd/system/k3s-agent.service.env
+        - /var/lib/kubelet
+        - /run/k3s
+        - /run/flannel
+
+    - name: Reload systemd after removing the k3s units
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+
+    - name: Remove the persisted antsd state
+      ansible.builtin.file:
+        path: "{{ antsd_state_dir }}"
+        state: absent
+
+    - name: Collect the paths that decide whether the node is really clean
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: wipe_check
+      loop:
+        - /var/lib/rancher/k3s/server
+        - /etc/rancher/k3s
+        - /etc/systemd/system/k3s.service
+        - /etc/systemd/system/k3s-agent.service
+        - "{{ antsd_state_dir }}"
+
+    - name: Fail if any k3s or antsd state survived the wipe
+      ansible.builtin.assert:
+        that:
+          - wipe_check.results | rejectattr('stat.exists', 'equalto', false) | list | length == 0
+        fail_msg: >-
+          Wipe incomplete, these paths still exist:
+          {{ wipe_check.results | selectattr('stat.exists') | map(attribute='item') | list }}
+        success_msg: k3s and antsd state removed
+
+# To replicate a reflash of the SD card, the playbook should theoretically start antsd again.
+# But for convenience, we leave it stopped.
+#    - name: Start antsd
+#      ansible.builtin.systemd_service:
+#        name: antsd
+#        state: started

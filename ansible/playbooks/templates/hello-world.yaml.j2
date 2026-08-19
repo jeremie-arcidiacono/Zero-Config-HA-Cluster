@@ -1,0 +1,92 @@
+# Hello-world test workload.
+#
+# It exists to prove the cluster actually works end to end.
+# Each pod serves a page naming itself and the node it runs on.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ hello_world_namespace }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ hello_world_app }}
+  namespace: {{ hello_world_namespace }}
+spec:
+  # One replica per Ready node, counted at deploy time by the playbook.
+  replicas: {{ ready_nodes }}
+  selector:
+    matchLabels:
+      app: {{ hello_world_app }}
+  template:
+    metadata:
+      labels:
+        app: {{ hello_world_app }}
+    spec:
+      # Spread the pods evenly across the nodes: one each, in practice.
+      # With ScheduleAnyway it's not a requirement: when a node
+      # fails, its pods can be rescheduled onto the survivors instead of staying Pending.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: {{ hello_world_app }}
+      containers:
+        - name: hello
+          image: {{ hello_world_image }}
+          imagePullPolicy: IfNotPresent
+          # Write a page naming this pod and node, then serve it.
+          command:
+            - /bin/sh
+            - -c
+            - |
+              mkdir -p /www
+              cat > /www/index.html <<EOF
+              Hello from the ANTS cluster!
+              pod=$POD_NAME
+              node=$NODE_NAME
+              EOF
+              exec busybox httpd -f -v -p 8080 -h /www
+          env:
+            # Injects the pod's own identity as environment variables.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - name: http
+              containerPort: 8080
+          # Makes `kubectl rollout status` meaningful: a pod counts as available only once it actually answers HTTP.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ hello_world_app }}
+  namespace: {{ hello_world_namespace }}
+spec:
+  # NodePort publishes the app on the same fixed port of every node, whether or not a pod runs there.
+  type: NodePort
+  selector:
+    app: {{ hello_world_app }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      nodePort: {{ hello_world_node_port }}

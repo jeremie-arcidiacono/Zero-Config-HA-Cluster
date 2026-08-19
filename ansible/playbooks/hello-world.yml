@@ -1,0 +1,176 @@
+---
+# Deploy a minimal "hello world" workload to verify the k3s cluster actually works.
+#
+# The app is a busybox httpd serving a page naming the pod and node that answered.
+# busybox comes from the k3s air-gap bundle already present on every ants-os node,
+# so nothing is downloaded and the cluster stays offline-capable.
+#
+#   ansible-playbook playbooks/hello-world.yml                              # deploy + verify
+#   ansible-playbook playbooks/hello-world.yml --tags check                 # verify only
+#   ansible-playbook playbooks/hello-world.yml -e hello_world_state=absent  # tear down
+
+# Only servers hold the admin kubeconfig: use its presence to find one.
+# This is because the server roles are chosen at runtime.
+- name: Locate a k3s server
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    k3s_kubeconfig: /etc/rancher/k3s/k3s.yaml
+  tasks:
+    - name: Look for the k3s admin kubeconfig
+      ansible.builtin.stat:
+        path: "{{ k3s_kubeconfig }}"
+      register: kubeconfig
+      tags: [always]
+
+    - name: Register this node as a k3s server
+      ansible.builtin.add_host:
+        name: "{{ inventory_hostname }}"
+        groups: k3s_servers
+      when: kubeconfig.stat.exists
+      changed_when: false
+      tags: [always]
+
+    - name: Ensure the cluster is bootstrapped
+      ansible.builtin.assert:
+        that: groups['k3s_servers'] | default([]) | length > 0
+        fail_msg: >-
+          No k3s server found: no node holds {{ k3s_kubeconfig }}. Bootstrap the cluster first.
+      run_once: true # noqa: run-once[task]
+      tags: [always]
+
+# Every kubectl call runs on a single server, so no run_once/delegate_to is needed below.
+- name: Deploy the hello-world test app
+  hosts: k3s_servers[0]
+  become: true
+  gather_facts: false
+  vars:
+    hello_world_state: present
+    hello_world_namespace: ants-demo
+    hello_world_app: hello-ants
+    hello_world_node_port: 30080
+    # Part of the k3s air-gap image bundle.
+    hello_world_image: docker.io/rancher/mirrored-library-busybox:1.37.0
+    manifest_path: /tmp/hello-world.yaml
+    kubectl: /usr/local/bin/k3s kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml
+  tasks:
+    - name: Deploy and verify the hello-world app
+      when: hello_world_state == 'present'
+      block:
+        - name: Count the Ready nodes
+          ansible.builtin.command:
+            cmd: "{{ kubectl }} get nodes --no-headers"
+          register: k3s_nodes
+          changed_when: false
+          tags: [deploy, check]
+
+        - name: Record the cluster size
+          ansible.builtin.set_fact:
+            # " Ready " keeps its surrounding spaces on purpose: it matches neither
+            # "NotReady" nor a cordoned "Ready,SchedulingDisabled".
+            ready_nodes: "{{ k3s_nodes.stdout_lines | select('search', ' Ready ') | list | length }}"
+          tags: [deploy, check]
+          
+        - name: Report the cluster size
+          ansible.builtin.debug:
+            msg: >-
+              k3s reports {{ ready_nodes }} Ready node(s)
+              for {{ groups['all'] | length }} inventory host(s)
+          tags: [deploy, check]
+
+        - name: Render the hello-world manifest
+          ansible.builtin.template:
+            src: hello-world.yaml.j2
+            dest: "{{ manifest_path }}"
+            owner: root
+            group: root
+            mode: '0644'
+          tags: [deploy]
+
+        - name: Apply the hello-world manifest
+          ansible.builtin.command:
+            cmd: "{{ kubectl }} apply -f {{ manifest_path }}"
+          register: kubectl_apply
+          changed_when: "'created' in kubectl_apply.stdout or 'configured' in kubectl_apply.stdout"
+          tags: [deploy]
+
+        - name: Wait for every replica to become available
+          ansible.builtin.command:
+            cmd: >-
+              {{ kubectl }} --namespace {{ hello_world_namespace }}
+              rollout status deployment/{{ hello_world_app }} --timeout=180s
+          changed_when: false
+          tags: [deploy]
+
+        - name: Get the pod placement
+          ansible.builtin.command:
+            cmd: "{{ kubectl }} --namespace {{ hello_world_namespace }} get pods --output wide"
+          register: k3s_pods
+          changed_when: false
+          tags: [check]
+
+        - name: Show the pod placement
+          ansible.builtin.debug:
+            msg: "{{ k3s_pods.stdout_lines }}"
+          tags: [check]
+
+        # Query from the control machine against each node's own address (proves the app is reachable from outside the cluster)
+        # A node that hosts no pod must still answer: that is the cross-node networking proof.
+        #
+        # A node that does not answer is not an error: this playbook is meant to be re-run with a node down.
+        - name: Query the app on every node
+          ansible.builtin.uri:
+            url: "http://{{ hostvars[item].ansible_host }}:{{ hello_world_node_port }}/"
+            return_content: true
+          register: probes
+          until: probes.status | default(0) == 200
+          retries: 10
+          delay: 3
+          failed_when: false
+          loop: "{{ groups['all'] }}"
+          delegate_to: localhost
+          become: false
+          tags: [check]
+
+        - name: Show which pod answered on each node
+          ansible.builtin.debug:
+            msg: >-
+              {{ item.item }} ->
+              {{ item.content.splitlines() | join(' | ')
+                 if item.status | default(0) == 200
+                 else 'NO ANSWER (' ~ (item.msg | default('unreachable')) ~ ')' }}
+          loop: "{{ probes.results }}"
+          loop_control:
+            label: "{{ item.item }}"
+          tags: [check]
+
+        - name: Summarise the node responses
+          ansible.builtin.debug:
+            msg: >-
+              {{ probes.results | selectattr('status', 'defined') | selectattr('status', 'equalto', 200) | list | length }}/{{ groups['all'] | length }}
+              node(s) answered on port {{ hello_world_node_port }}
+          tags: [check]
+
+        - name: Show how to reach the app
+          ansible.builtin.debug:
+            msg: >-
+              Open http://{{ hostvars[groups['all'][0]].ansible_host }}:{{ hello_world_node_port }}/
+              in a browser (any node address works)
+          tags: [check]
+
+    - name: Remove the hello-world app
+      when: hello_world_state == 'absent'
+      block:
+        - name: Delete the hello-world namespace
+          ansible.builtin.command:
+            cmd: >-
+              {{ kubectl }} delete namespace {{ hello_world_namespace }}
+              --ignore-not-found --wait=true
+          register: kubectl_delete
+          changed_when: kubectl_delete.stdout | length > 0
+
+        - name: Remove the rendered manifest
+          ansible.builtin.file:
+            path: "{{ manifest_path }}"
+            state: absent
