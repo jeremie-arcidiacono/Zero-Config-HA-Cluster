@@ -57,6 +57,7 @@
   conclusion: include("contents/conclusion.typ"),
   appendixes: (
     include "contents/annexe_antsd-states.typ",
+    include "contents/annexe_testbed-inventory.typ",
   ),
   bibliography-bytes: read("bibliography.bib", encoding: none)
 )
