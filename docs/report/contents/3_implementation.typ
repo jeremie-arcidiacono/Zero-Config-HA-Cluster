@@ -76,7 +76,6 @@ Ce paquet joue également le rôle de frontière entre la bibliothèque de Hashi
 Plutôt que de laisser circuler les types de Serf dans tout le programme, il les traduit vers un type d'événement qui nous est propre, et n'expose qu'une poignée d'opérations : rejoindre des pairs, quitter le cluster, publier l'état local via les tags, diffuser un événement, et fournir une vue des membres connus.
 
 Cette frontière offre un grand avantage : si l'API de Serf évolue, ou si nous devions un jour changer de mécanisme de communication, un seul paquet serait à reprendre.
-#highlight("todo : parler de l'interface qu'on peut mock pour les tests ?")
 
 `serfnode` traduit également les événements.
 Serf livre les changements d'appartenance sous forme de lots, qui peuvent concerner plusieurs machines à la fois.

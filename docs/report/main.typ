@@ -52,6 +52,8 @@
     "TPM": ("Trusted Platform Module"),
     "mDNS": ("Multicast DNS"),
     "RPC": ("Remote Procedure Call"),
+    "GPL": ("GNU General Public License"),
+    "HA": ("High Availability"),
   ),
   figures_urls: urls,
   introduction: include("contents/introduction.typ"),
