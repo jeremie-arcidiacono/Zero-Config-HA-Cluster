@@ -6,9 +6,8 @@
 
 **Documents** :
 
-- [Énoncé](docs/enonce.md)
-- [Rapport](docs/report/report.pdf) *(en cours de
-  rédaction)*
+- [Énoncé](docs/report/topic.pdf)
+- [Rapport](docs/report/report.pdf)
 - [Gradechelor](https://gradechelor.hesge.ch/2026/documents/Arcidiacono-772)
 
 Ce dépôt contient l'implémentation d'une solution d'orchestration distribuée
@@ -25,13 +24,13 @@ simulé.
 ## Structure du dépôt
 
 ```
+ansible/    Playbooks utilisés pour déployer antsd sur les nœuds physiques pendant le
+            développement (indépendant du build de l'image).
+ants-os/    Build Packer de l'image Raspberry Pi OS personnalisée (ARM64, air-gapped)
+            embarquant antsd et K3s.
 antsd/      Daemon Go (ANTS-Daemon) qui tourne sur chaque nœud : découverte et
             appartenance au cluster via Serf, élection de rôle, installation et
             pilotage de K3s.
-ants-os/    Build Packer de l'image Raspberry Pi OS personnalisée (ARM64, air-gapped)
-            embarquant antsd et K3s.
-ansible/    Playbooks utilisés pour déployer antsd sur les nœuds physiques pendant le
-            développement (indépendant du build de l'image).
 docs/       Architecture, spécification du daemon et de ses logiques, gestion de projet, et
             le mémoire.
 ```
