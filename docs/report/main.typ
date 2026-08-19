@@ -44,6 +44,7 @@
   acronyms: (
     "HEPIA": ("Haute école du paysage, d'ingénierie et d'architecture"),
     "HES-SO": ("Haute école spécialisée de Suisse Occidentale"),
+    "PoC": ("Proof of Concept"),
     "SWIM": ("Scalable Weakly Consistent Infection-style Process Group Membership"),
     "DHCP": ("Dynamic Host Configuration Protocol"),
     "NTP": ("Network Time Protocol"),

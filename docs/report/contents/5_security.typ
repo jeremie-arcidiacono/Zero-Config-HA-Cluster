@@ -10,7 +10,7 @@ Ce chapitre y répond.
 La sécurité a été volontairement minimisée de la conception comme de l'implémentation présentées jusqu'ici : le système ne comporte ni authentification, ni chiffrement de sa couche basse, ni notion d'identité vérifiable d'une machine.
 Ce choix est assumé, puisqu'il a permis de traiter d'abord le cœur du sujet, à savoir la formation autonome du cluster et sa capacité à se réparer.
 Ce chapitre existe donc pour que cette absence apparaisse comme une décision documentée plutôt que comme un oubli, et pour donner à ANTS A.I. Systems une base de travail en vue d'un déploiement réel.
-Ce qui est décrit n'est implémenté.
+Ce qui est décrit n'est pas implémenté.
 
 Nous posons d'abord le cadre de l'analyse, c'est-à-dire ce que l'on protège et contre qui, puis nous dressons l'état actuel du système sous la forme d'une liste de constats.
 Nous proposons ensuite les mesures qui y répondent, avant de terminer par la question de conception qui commande la valeur de presque toutes les autres : celle de l'enrôlement d'une machine neuve.
@@ -24,14 +24,14 @@ Trois propriétés du déploiement visé, déjà décrites au #ref(<chapter-cont
 Le cluster est hors ligne, à l'exception de quelques services de base comme la synchronisation de l'heure, ce qui retire beaucoup de surfaces classiques : ni dépendance téléchargée à l'exécution, ni exposition directe depuis Internet, ni contrôle distant.
 L'installation est faite par le client, sans compétence particulière, ce qui est toute la raison d'être du projet : il n'y a personne pour saisir une configuration, gérer des certificats ou retenir un mot de passe, et toute mesure qui suppose un administrateur compétent sur place est hors sujet.
 Le matériel est enfin livré par ANTS, donc l'image système et son contenu sont maîtrisés à la fabrication.
-C'est le seul moment où un secret peut être injecté sans aucun effort de la part du client, ce qui rendra tentante, plus loin, l'option d'une clé déposée dans l'image.
+C'est le seul moment où un secret peut être injecté sans aucun effort de la part du client, ce qui rend tentante, plus loin, l'option d'une clé déposée dans l'image.
 
 Viennent ensuite les biens à protéger, par ordre décroissant de gravité en cas de compromission.
 Le token d'enrôlement de K3s vaut le contrôle total du cluster, puisque celui qui le possède peut rejoindre le cluster comme serveur, donc devenir membre du plan de contrôle, lire l'intégralité de la base de données et ordonnancer n'importe quelle charge sur n'importe quelle machine.
 Le contenu de cette base de données vient ensuite, car il contient les secrets Kubernetes de toutes les charges déployées, donc en pratique les identifiants applicatifs.
-Un accès en lecture à ces données est d'autant plus grave, car il permettrait là aussi de prendre le contrôle du cluster.
+Un accès en lecture à ces données est d'autant plus grave qu'il permettrait là aussi de prendre le contrôle du cluster.
 La disponibilité du plan de contrôle mérite d'être listée comme un bien à part entière, car plusieurs faiblesses identifiées plus loin ne permettent de voler quoi que ce soit, mais permettent de casser la haute disponibilité, ce qui revient à annuler l'intérêt du produit.
-L'intégrité du binaire antsd enfin, car un daemon modifié est un point de contrôle idéal : il tourne en root sur chaque machine, installe K3s et pilote le cycle de vie du cluster.
+L'intégrité du binaire antsd vient enfin, car un daemon modifié est un point de contrôle idéal : il tourne en root sur chaque machine, installe K3s et pilote le cycle de vie du cluster.
 
 Une précision de méthode s'impose pour terminer.
 Le banc d'essai est constitué de six Raspberry Pi 5 démarrant sur carte mémoire, alors que les machines qu'ANTS produira auront un matériel maîtrisé et un stockage interne, si bien qu'une partie des observations faites sur le banc ne survivra pas au passage en production.
@@ -40,14 +40,14 @@ Chaque constat et chaque mesure porte pour cette raison une portée : `PoC`, `pr
 === Profils d'attaquant et hypothèses <part-security-assumptions>
 
 Le système actuel repose sur une frontière de confiance unique et implicite : tout ce qui se trouve sur le réseau local est de confiance, et un membre du gossip Serf est cru sur parole, aussi bien sur son identité que sur les ordres qu'il émet.
-Cette hypotèse est bien sûr trop optimise.
+Cette hypothèse est bien sûr trop optimiste.
 
 Le premier profil d'attaquant est celui auquel on pense spontanément : une machine branchée sur le même réseau que le cluster, ce qui suffit à exploiter la majorité des constats qui suivent.
 Le scénario réaliste n'est d'ailleurs pas forcément celui d'un attaquant déterminé, car chez un client, un poste compromis ou une personne de passage dans le local suffisent.
 
-Le second concèrne les applications finales.
+Le second concerne les applications finales.
 Les charges d'intelligence artificielle générative d'ANTS tournent dans le cluster, donc sur ce réseau : un conteneur en `hostNetwork`, un pod aux privilèges trop larges ou une évasion de conteneur classique se retrouvent directement en position d'attaquant adjacent, sur chacune des machines, sans avoir eu besoin d'un accès physique.
-Ce profil est d'autant plus pertinent que le produit d'ANTS consiste à exécuter du code de modèles et différentes applications qui pourrait avoir de nombreuses dépendances (par exemple écosystème Python, dont la chaîne d'approvisionnement est un vecteur connu).
+Ce profil est d'autant plus pertinent que le produit d'ANTS consiste à exécuter du code de modèles et différentes applications qui pourraient avoir de nombreuses dépendances (par exemple l'écosystème Python, dont la chaîne d'approvisionnement est un vecteur connu).
 Il a néanmoins une limite : tant qu'ANTS décide seule de ce qui est déployé et que les charges restent peu nombreuses, le risque reste contenu, et il changerait de nature si le catalogue d'applications venait à s'ouvrir à des tiers.
 
 Un troisième profil, celui de l'accès physique à une machine, doit être qualifié plus soigneusement, car il est trivial sur le banc d'essai alors qu'en production la difficulté dépendra entièrement de choix (matériels entre autres) qui ne sont pas les nôtres.
@@ -85,10 +85,10 @@ Le trafic de gossip circule donc en clair, et surtout aucun secret n'est exigé 
 C'est la faiblesse fondatrice, puisque Serf est la couche sur laquelle repose toute la logique du cluster : il n'existe aujourd'hui aucun contrôle d'accès entre un inconnu et le pilotage de ce cluster.
 
 La #ref(<fig_security_trust-boundary>) résume cette asymétrie : la couche haute exige un secret de tout arrivant, la couche basse n'exige rien, et les deux profils d'attaquant décrits plus haut atteignent directement cette dernière.
-Les flèches pleines représentent un accès obtenu sans aucun secret, les flèches pointillées un accès refusé
+Les flèches pleines représentent un accès obtenu sans aucun secret, les flèches pointillées un accès refusé.
 
 #hepia.sourced_figure(
-  caption: [Frontière de confiance actuelle.],
+  caption: [Frontière de confiance actuelle],
   label: <fig_security_trust-boundary>,
   image("../assets/diagrams/security_trust-boundary.svg", width: 80%),
 )
@@ -103,7 +103,7 @@ Répétée, l'opération démonte le plan de contrôle machine par machine, et c
 
 Deux autres conséquences du même mécanisme méritent également une brève mention.
 Les événements du protocole de premier démarrage sont forgeables de la même façon, ce qui permet de perturber la mise en service d'un lot de machines neuves, l'impact restant moindre puisque les gardes refusent d'agir sur une machine où K3s est déjà installé.
-La disponibilité peut par ailleurs être attaquée directement, ce qui vise la propriété même que le produit doit garantir : le nombre de serveurs visé étant déterminé de la population observée, un attaquant qui ajoute et retire des membres à volonté fait osciller la cible entre un, trois, cinq et sept, et chaque conversion qui en résulte désinstalle puis réinstalle K3s sur une machine réelle.
+La disponibilité peut par ailleurs être attaquée directement, ce qui vise la propriété même que le produit doit garantir : le nombre de serveurs visé étant déterminé à partir de la population observée, un attaquant qui ajoute et retire des membres à volonté fait osciller la cible entre un, trois, cinq et sept, et chaque conversion qui en résulte désinstalle puis réinstalle K3s sur une machine réelle.
 
 Deux précisions expliquent pourquoi ce constat n'est pas décliné davantage.
 La première tient à l'hypothèse de confiance posée plus haut, qui fait que fermer l'entrée referme du même coup toutes les conséquences ci-dessus.
@@ -119,7 +119,7 @@ Le système repose sur un secret unique, fixé une fois pour toutes et jamais re
 Ce qui fait la gravité du constat n'est pas l'unicité mais la portée de ce secret.
 K3s distingue le token serveur du token agent et prévoit que le second soit configuré séparément, faute de quoi le token agent est simplement le token serveur@k3s_token_2026.
 Comme antsd ne configure que le premier, chaque agent du cluster détient un secret suffisant pour rejoindre le cluster en tant que serveur, c'est-à-dire pour entrer dans le plan de contrôle et lire toute la base de données : la machine la moins privilégiée du cluster stocke en permanence les identifiants les plus privilégiés.
-L'absence de rotation est plus complexe à résoudre, car elle impose notamment de gérer le fait que chaque servers et agents doivent obtenir le nouveau token puis redémarrer pour être de nouveau opérationnel après une rotation.
+L'absence de rotation est plus complexe à résoudre, car elle impose notamment de gérer le fait que chaque serveur et chaque agent doivent obtenir le nouveau token, puis redémarrer pour être de nouveau opérationnels après une rotation.
 
 Le troisième (`SEC-03`) est que le stockage d'une machine expose tout ce qu'il contient, faute de chiffrement du disque et de vérification de l'intégrité de ce qui démarre.
 Trois éléments méritent d'être nommés.
@@ -142,13 +142,14 @@ Il restera donc un processus privilégié disposant d'un accès en écriture à 
 === K3s, charges hébergées et interface d'administration
 
 Le sixième constat (`SEC-06`) est que K3s est livré sans les options de durcissement que la distribution laisse à l'exploitant : le chiffrement des secrets au repos, la journalisation d'audit de l'API (pour laquelle K3s ne crée par défaut ni le répertoire ni la politique), le contrôle d'admission Pod Security et le durcissement des paramètres du kernel.
-K3s publie un guide dédié qui documente la configuration correspondant aux exigences du référentiel #acr("CIS")@k3s_cis_2026, le sujet est donc documenté et la seule question est celle du dosage.
+K3s publie un guide dédié qui documente la configuration correspondant aux exigences du référentiel #acr("CIS")@k3s_cis_2026.
+Le sujet est donc documenté et la seule question est celle du dosage.
 
 Le septième (`SEC-07`) est que l'infrastructure reste joignable depuis les charges hébergées, rien n'isolant les charges applicatives des services d'infrastructure des machines : un pod en `hostNetwork`, ou une évasion de conteneur, atteint Serf et l'interface d'administration sur chacune d'elles.
 Ce constat compte parce qu'il change la difficulté d'exploitation de tout le reste des constats, puisque sans lui il faut un accès direct au réseau du client, alors qu'avec lui une charge applicative compromise suffit.
 
 Le dernier (`SEC-08`) est que l'interface de contrôle et de supervision est ouverte, puisqu'elle écoute en HTTP clair, sans authentification, et expose la topologie complète du cluster ainsi que des actions de contrôle.
-Il est posé puis sorti du périmètre pour la raison donnée plus haut, ces points d'accès étant assumés comme des remplaçants temporaires des boutons physiques et de l'interface web final que ANTS crééra, comme expliqué dans la #ref(<section-conception-antsd>, supplement: [section]).
+Il est posé puis sorti du périmètre pour la raison donnée plus haut, ces points d'accès étant assumés comme des remplaçants temporaires des boutons physiques et de l'interface web finale qu'ANTS créera, comme expliqué dans la #ref(<section-conception-antsd>, supplement: [section]).
 
 Le #ref(<table_security_findings>) récapitule ces constats, leur portée et la mesure principale qui leur répond.
 Il sert de fil conducteur à la section suivante, qui ne revient donc pas sur les problèmes eux-mêmes.
@@ -194,10 +195,10 @@ C'est l'objet de la #ref(<section-security-enrollment>, supplement: [section]), 
 Il faut en revanche résister à la tentation de sécuriser la découverte, car le protocole #acr("mDNS") n'est pas conçu pour cela et une machine qui annonce un service qu'elle n'offre pas ne cause aucun dommage tant que l'étape suivante la refuse.
 La découverte reste ouverte, le contrôle d'accès est au gossip.
 
-Nous pensons qu'une mesure complémentaire mérite d'être discuté car nous l'avons étudié, bien qu'elle s'avère peu utile si l'on considère que l'entrée du cluster est sécurisé et que l'on ne souhaite pas de défense en profondeur.
+Nous pensons qu'une mesure complémentaire mérite d'être discutée car nous l'avons étudiée, bien qu'elle s'avère peu utile si l'on considère que l'entrée du cluster est sécurisée et que l'on ne souhaite pas de défense en profondeur.
 Elle exploite une propriété que la conception possède déjà : le coordinateur légitime est déterministe, et chaque machine sait le calculer depuis sa propre vue du cluster.
 Il suffit donc que les ordres du coordinateur nomment son émetteur pour que le récepteur confronte ce nom à sa propre observation et rejette un ordre venu d'ailleurs.
-Cette vérification devient indispensable si la clé de gossip est commune à toute la flotte (dans le cas où un node légitime venait à être compromis), et reste utile dans le cas contraire au titre de la défense en profondeur.
+Cette vérification devient indispensable si la clé de gossip est commune à toute la flotte (dans le cas où un nœud légitime venait à être compromis), et reste utile dans le cas contraire au titre de la défense en profondeur.
 Un point de vigilance pour sa réalisation : la vue du récepteur peut différer de celle de l'émetteur, notamment juste après une panne, et il faut donc s'assurer que ce décalage mène à un rejet temporaire suivi d'une nouvelle tentative plutôt qu'à un blocage.
 
 Un dernier garde-fou relève autant de la robustesse que de la sécurité.
@@ -227,15 +228,15 @@ Cette mesure reste transparente pour l'utilisateur, et elle a un effet de levier
 Sur le principe, une image livrée ne doit par ailleurs contenir ni mot de passe par défaut, ni clé publique commune à la flotte.
 Si un accès de maintenance est nécessaire, il doit être propre à chaque machine, ce qui suppose une étape de personnalisation en fabrication et fait donc apparaître une action qui n'existe pas aujourd'hui.
 Cette étape de personnalisation peut être complexe à mettre en œuvre, car elle doit être compatible avec la production et la distribution en masse de machines identiques.
-Ce n'est, à ce jour, pas souhaibale par ANTS.
+Ce n'est, à ce jour, pas souhaité par ANTS.
 
 Le durcissement de l'unit systemd de antsd doit enfin partir du plancher de privilèges établi par `SEC-05`.
-Ce qui peut être durci sont des choses comme la protection des répertoires personnels, la restriction des familles d'adresses ou la limitation des capacités, tandis que la protection du système de fichiers doit être ramenée à un niveau compatible avec les écritures nécessaires.
+Le durcissement peut porter sur des éléments comme la protection des répertoires personnels, la restriction des familles d'adresses ou la limitation des capacités, tandis que la protection du système de fichiers doit être ramenée à un niveau compatible avec les écritures nécessaires.
 La démarche compte ici plus que le résultat, car une directive de durcissement copiée sans vérification donne l'illusion de la sécurité tout en cassant la fonctionnalité.
 
 Une autre possibilité consiste à scinder le daemon en deux parties, l'une privilégiée et l'autre non.
-Le petit process privilégié expose une API réstrinte (par exemple avec un socket Unix) que la partie non privilégiée (qui contient toute la logique métier) appelle pour réaliser les opérations sensibles.
-Des checks de sécurité sont effectués à l'entrée de cette API, tel que des allow-lists, vérification de checksum, etc.
+Le petit processus privilégié expose une API restreinte (par exemple avec un socket Unix) que la partie non privilégiée (qui contient toute la logique métier) appelle pour réaliser les opérations sensibles.
+Des contrôles de sécurité sont effectués à l'entrée de cette API, tels que des allow-lists, des vérifications de checksum, etc.
 De cette manière, si la partie non privilégiée est compromise (dépendances, bug, etc.), l'attaquant n'a pas un accès complet.
 Naturellement, cette option demande des changements importants de conception et d'implémentation.
 
@@ -263,7 +264,7 @@ Ce second point est peu coûteux et mérite d'être retenu, car la configuration
 === Le problème et l'observation qui le débloque
 
 Toute mesure qui ferme le cluster repose sur un secret, qu'il s'agisse d'une clé de gossip ou d'un token d'enrôlement.
-La question n'est pas de savoir comment ce secret protège, c'est un problème résolu, mais comment une machine neuve l'obtient, sachant qu'il n'y aucun personnel technique pour le saisir.
+La question n'est pas de savoir comment ce secret protège, c'est un problème résolu, mais comment une machine neuve l'obtient, sachant qu'il n'y a aucun personnel technique pour le saisir.
 
 Le raisonnement se boucle sur lui-même.
 Une machine qui vient d'être branchée doit prouver qu'elle a le droit de rejoindre, elle ne peut le prouver qu'avec un secret, et ce secret doit bien venir de quelque part.
@@ -274,7 +275,7 @@ Avoir une clé propre au cluster le ferme, y compris à des machines parfaitemen
 La promesse du produit passe donc de "branchez la machine, elle rejoint" à "enrôlez la machine", ce qui n'est pas souhaitable.
 Et comme une machine admise est considérée de confiance, il n'y a aucun second rempart derrière cette porte, donc le secret qui la garde porte à lui seul toute la sécurité de la couche basse.
 
-Le protocole de premier démarrage contient pourtant déjà une réponse partielle, malgré qu'elle n'a pas été conçue pour la sécurité.
+Le protocole de premier démarrage contient pourtant déjà une réponse partielle, bien qu'elle n'ait pas été conçue pour la sécurité.
 L'écran de confirmation présenté dans la #ref(<part-conception-bootstrap>, supplement: [partie]) affiche le nombre de machines découvertes et demande à l'utilisateur de confirmer lorsque ce nombre correspond à ce qu'il attend, pour une raison purement fonctionnelle : éviter d'attendre un long délai avant de figer la composition du cluster initial.
 Cette interaction est une attestation humaine, par laquelle l'utilisateur déclare que ces machines sont les siennes.
 C'est le seul moment du cycle de vie où une personne de confiance se prononce sur la composition du cluster, et il est déjà là, déjà accepté par la conception, déjà implémenté.
@@ -296,14 +297,14 @@ Pour la cohorte initiale, le coût est nul, et toute la difficulté est reporté
 Cette option a une propriété qui compte beaucoup au vu du modèle de menace : être dans le gossip vaut alors preuve d'appartenance au cluster, donc l'hypothèse de confiance entre membres s'applique pleinement et le modèle reste simple à expliquer comme à vérifier.
 Son coût est tout aussi réel : rejoindre un cluster existant ne demande aujourd'hui aucune action de l'utilisateur, ce qui est même une propriété mise en avant par le projet, et cette option en ajoute une.
 
-La troisième option est hybride, et part d'un constat : les deux secrets du système ne protègent pas la même chose et n'ont pas la même valeur, la clé de gossip participe à la couche basse alors que le token de K3s vaut le contrôle total du cluster.
+La troisième option est hybride, et part d'un constat : les deux secrets du système ne protègent pas la même chose et n'ont pas la même valeur, puisque la clé de gossip participe à la couche basse alors que le token de K3s vaut le contrôle total du cluster.
 Une clé de flotte, présente dans l'image, sert donc au gossip et à la découverte, ce qui permet à une machine neuve de parler à ses pairs à tout moment et préserve intégralement le zéro-configuration.
 Un secret propre au cluster, engendré au bootstrap, protège ce qui compte vraiment, à savoir l'entrée dans K3s, et ne quitte jamais le cluster sous sa forme durable : une machine qui arrive obtient à la place un jeton d'enrôlement à durée de vie limitée, émis à la demande par le plan de contrôle, ce que K3s prend en charge nativement@k3s_token_2026.
 L'articulation avec l'existant est directe, puisqu'une machine qui arrive rejoint toujours en agent et que le coordinateur est déjà celui qui lui transmet l'adresse à joindre.
 
 Une condition ne doit pas être manquée dans cette dernière option.
 La clé de gossip y est partagée par toute la flotte, donc être dans le gossip ne prouve plus l'appartenance à un cluster donné : les conséquences décrites en `SEC-01`, à commencer par le détournement d'un ordre de conversion, redeviennent atteignables par quiconque a extrait la clé de flotte d'une machine.
-Cette option n'est donc cohérente qu'accompagnée d'une sécurité en profondeur (tel que la vérification de l'émetteur des ordres décrit plus haut), ce qui est le prix de sa souplesse.
+Cette option n'est donc cohérente qu'accompagnée d'une sécurité en profondeur (telle que la vérification de l'émetteur des ordres décrite plus haut), ce qui est le prix de sa souplesse.
 
 Le #ref(<table_security_enrollment>) résume la comparaison des trois options.
 
@@ -326,9 +327,6 @@ Le #ref(<table_security_enrollment>) résume la comparaison des trois options.
   ),
 )
 
-#highlight("REVIEW HERE")
-
-
 === Ce que la conception laisse ouvert
 
 La première option est écartée, car elle ne fait que déplacer le problème et n'offre aucune rotation.
@@ -347,7 +345,7 @@ Deux questions restent enfin sans réponse.
 La première est celle de la politique d'émission des jetons.
 L'option hybride déplace le contrôle d'accès depuis la possession d'un secret vers une décision prise par le cluster, ce qui est un progrès, mais cette décision doit s'appuyer sur quelque chose.
 Une politique purement automatique équivaut à la première option, une politique demandant une confirmation équivaut à la deuxième, et l'espace intermédiaire est probablement là où se trouve la bonne réponse : par exemple une fenêtre d'ajout ouverte temporairement par l'utilisateur, ou une acceptation automatique tant que la population reste sous le nombre de machines attesté.
-Cela reste moins contraignant pour l'utilisateur que l'appairage, qui n'a pas un code à saisir par machine.
+Cela reste moins contraignant pour l'utilisateur que l'appairage, puisqu'il n'y a pas un code à saisir par machine.
 
 La deuxième est celle de la révocation, qu'aucune des trois options ne traite dans le cas d'une machine volée ou mise au rebut.
 La rotation des secrets permet d'exclure une machine, mais suppose une opération sur toutes les autres, et une révocation ciblée supposerait une identité par machine, que le protocole n'a pas aujourd'hui puisqu'une machine se contente d'annoncer son nom.

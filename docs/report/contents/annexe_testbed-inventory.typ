@@ -20,6 +20,6 @@ Cette annexe recense le matériel prêté par l'école pour constituer le banc d
     [6x], [Carte SD],
     [6x], [Câble Ethernet],
     [1x], [Switch Cisco SF110-16],
-    [1x], [Câble d'alimentation standard C13 -- T12],
+    [1x], [Câble d'alimentation standard C13 - T12],
   ),
 )

@@ -99,7 +99,7 @@ Une charge applicative qui s'échappe de son conteneur peut donc théoriquement 
 Nous acceptons malgré tout ces inconvénients, car l'alternative est trop coûteuse dans notre contexte.
 Le produit vendu par ANTS A.I. Systems est destiné à des clients qui n'acquièrent que quelques machines.
 En réserver au moins trois à la seule gestion du cluster reviendrait à en soustraire une part considérable.
-Kubernetes fournit par ailleurs l'option nécessaire si ce choix devait être revu plus tard, sous la forme d'un paramètre qui empêchent l'ordonnanceur de placer des charges ordinaires sur les nœuds Server@kubernetes_taints_2026.
+Kubernetes fournit par ailleurs l'option nécessaire si ce choix devait être revu plus tard, sous la forme d'un paramètre qui empêche l'ordonnanceur de placer des charges ordinaires sur les nœuds Server@kubernetes_taints_2026.
 
 Dans la suite de ce document, nous utiliserons la terminologie de K3s plutôt que celle de Kubernetes.
 
@@ -124,7 +124,7 @@ Enfin, Serf peut conserver l'état du cluster sous forme de snapshots. Cela perm
 
 == Présentation des besoins et contraintes <section-context-needs>
 
-Les besoins de ce projet ont trois origines. Ils viennent du produit que ANTS A.I. Systems commercialise, de l'énoncé du travail de Bachelor, et du projet de semestre qui l'a précédé@arcidiacono_systeme_2026, où une première liste de contraintes avait été posée pour cadrer la recherche de solutions existantes.
+Les besoins de ce projet ont trois origines. Ils viennent du produit qu'ANTS A.I. Systems commercialise, de l'énoncé du travail de Bachelor, et du projet de semestre qui l'a précédé@arcidiacono_systeme_2026, où une première liste de contraintes avait été posée pour cadrer la recherche de solutions existantes.
 
 Les contraintes du projet de semestre ont été écrites avant toute expérimentation sur du matériel réel, et deux d'entre elles ont évolué. Nous les présentons ici telles qu'elles étaient, puis nous expliquons ce qui a motivé leur évolution. 
 // Cette section décrit donc le problème à résoudre, et non la solution : la manière dont l'architecture y répond fait l'objet du #ref(<chapter-conception>).
@@ -135,9 +135,9 @@ Le point de départ est un lot de machines identiques, sorties de leur emballage
 
 Les machines doivent d'abord se trouver mutuellement sur le réseau, sans que personne n'ait à saisir la moindre adresse. Elles doivent ensuite installer K3s, puis s'accorder sur la configuration du cluster à former et sur le rôle de chacune. Une machine ajoutée plus tard, alors que le cluster est déjà en service, doit rejoindre celui-ci d'elle-même, sans que le cluster existant ait à être arrêté ou reconfiguré.
 
-Le système doit enfin survivre aux pannes. La perte d'une machine ne doit pas interrompre le service, et le cluster doit se réorganiser pour retrouver un état sain, ce qui suppose aussi bien d'écarter la machine défectueuse que de redistribuer les responsabilités qu'elle portait. De cette manière le système est capable de tenir dans la durée.
+Le système doit enfin survivre aux pannes. La perte d'une machine ne doit pas interrompre le service, et le cluster doit se réorganiser pour retrouver un état sain, ce qui suppose aussi bien d'écarter la machine défectueuse que de redistribuer les responsabilités qu'elle portait. De cette manière, le système est capable de tenir dans la durée.
 
-L'ensemble doit rester clé en main. Le client type de ANTS A.I. Systems est une petite entreprise ou un indépendant, qui ne possède pas d'équipe technique ni les ressources nécessaires pour gérer une infrastructure complexe. Les machines sont donc vendues comme un produit autonome.
+L'ensemble doit rester clé en main. Le client type d'ANTS A.I. Systems est une petite entreprise ou un indépendant, qui ne possède pas d'équipe technique ni les ressources nécessaires pour gérer une infrastructure complexe. Les machines sont donc vendues comme un produit autonome.
 
 Le client doit malgré tout pouvoir garder un œil sur son cluster, pour en consulter l'état et déclencher les rares actions qui lui reviennent. Cet accès prend la forme d'une interface web, dont la réalisation sort du périmètre de ce travail.
 Cependant, les informations et les commandes qu'elle expose doivent être fournies par le système.
@@ -173,22 +173,22 @@ ANTS A.I. Systems ne souhaite pas fonder son produit sur des logiciels propriét
 
 === Contraintes révisées en cours de projet
 
-Le projet de semestre imposait que le système ne devait s'appuyer sur aucune infrastructure présente sur le réseau, et citait explicitement le serveur #acr("DHCP") comme dépendance à éviter. 
+Le projet de semestre imposait que le système ne s'appuie sur aucune infrastructure présente sur le réseau, et citait explicitement le serveur #acr("DHCP") comme dépendance à éviter. 
 Le raisonnement s'appuyait sur l'auto-attribution d'adresses que permet IPv6, laquelle supprime effectivement ce besoin, et sur l'idée qu'un service extérieur constitue un problème d'autonomie.
 
-Cette position a été réevaluée durant le projet (en juin 2026). 
+Cette position a été réévaluée durant le projet (en juin 2026). 
 Un réseau d'entreprise, même modeste, dispose presque toujours d'un serveur #acr("DHCP"), et un client qui n'en possède pas exploite un réseau suffisamment particulier pour ne pas correspondre à la cible du produit. Se priver d'une option universellement disponible pour couvrir un cas de figure rare complique la solution sans rien apporter au client type. 
-Nous considérons donc désormais qu'un serveur #acr("DHCP") est présent. La contrainte de fond n'est pas abandonnée pour autant, puisque le système continue de fonctionner sans aucun serveur ou infrastructure qui lui soit propre : seul la configuration réseau est déléguée à l'existant.
+Nous considérons donc désormais qu'un serveur #acr("DHCP") est présent. La contrainte de fond n'est pas abandonnée pour autant, puisque le système continue de fonctionner sans aucun serveur ou infrastructure qui lui soit propre : seule la configuration réseau est déléguée à l'existant.
 
 La seconde contrainte revue concerne l'accès à Internet, et il faut ici distinguer deux exigences.
 
-La première porte sur le système d'exploitation, qui doit contenir tout le nécessaire pour installer et démarrer anstd et K3s sans rien télécharger. Cette exigence figure dans l'énoncé du travail et elle est satisfaite. 
+La première porte sur le système d'exploitation, qui doit contenir tout le nécessaire pour installer et démarrer antsd et K3s sans rien télécharger. Cette exigence figure dans l'énoncé du travail et elle est satisfaite. 
 Elle protège le client contre une installation qui échouerait à cause d'un réseau lent, temporairement indisponible, mal configuré ou d'un registre d'images indisponible, situations bien plus fréquentes qu'une absence complète de connectivité.
 
 La seconde portait sur le réseau lui-même, que le projet de semestre supposait totalement coupé d'Internet. 
-Grâce à des tests en conditions réels sur des machines physiques (le banc d'essai), nous avons constaté que cette hypothèse compliquait inutilement la solution.
+Grâce à des tests en conditions réelles sur des machines physiques (le banc d'essai), nous avons constaté que cette hypothèse compliquait inutilement la solution.
 
-Le banc d'essai ayant été volontairement placé sur un réseau isolé afin de ressembler le plus possible aux conditions de départ, nous avons constaté que les machines n'avaient plus la bonne date et heure. 
+Le banc d'essai ayant été volontairement placé sur un réseau isolé afin de ressembler le plus possible aux conditions de départ, nous avons constaté que les machines n'avaient plus la bonne date ni la bonne heure. 
 Leur date était fausse de plusieurs mois, et surtout elle différait d'une machine à l'autre. 
 L'explication est simple : les Raspberry Pi utilisés ne conservent pas l'heure lorsqu'ils sont hors tension, faute d'horloge sauvegardée par pile, et le service de synchronisation (#acr("NTP")) n'a aucun serveur de temps à interroger sur un réseau isolé. 
 Le problème est plus marqué sur des Raspberry Pi que sur les machines commercialisées par ANTS A.I. Systems, mais il peut tout de même survenir, en particulier sur de longues périodes.
@@ -197,6 +197,6 @@ Une heure fausse peut causer de nombreux problèmes, et fournir un mécanisme de
 
 Nous avons donc accepté, en juillet 2026, de lever cette contrainte. 
 Le cluster peut disposer d'un accès à Internet, ce qui est de toute façon le cas d'un réseau d'entreprise ordinaire, et il en tire la synchronisation de l'heure. 
-Cet accès n'est pas une dépendance forte : rien dans la formation du cluster ni dans sa réparation ne nécéssite Internet, et une coupure de la liaison extérieure ne modifie en rien le comportement du système.
+Cet accès n'est pas une dépendance forte : rien dans la formation du cluster ni dans sa réparation ne nécessite Internet, et une coupure de la liaison extérieure ne modifie en rien le comportement du système.
 
 L'ensemble des besoins et des contraintes étant posé, nous pouvons maintenant présenter l'architecture conçue pour y répondre.

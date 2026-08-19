@@ -37,7 +37,7 @@ Trois difficultés plus générales méritent en revanche d'être rassemblées i
 
 La première touche à la complexité de K3s et d'etcd.
 Ces outils étant complexes et très riches en fonctionnalités, leur compréhension demande un temps d'apprentissage conséquent.
-N'étant familiarisé ni avec l'un ni avec l'autre, il a fallu un certain temps pour comprendre leur fonctionnement et leurs interactions, et pour identifier les détails pertinents dans notre situation.
+Comme nous n'étions familiarisés ni avec l'un ni avec l'autre, il a fallu un certain temps pour comprendre leur fonctionnement et leurs interactions, et pour identifier les détails pertinents dans notre situation.
 
 La deuxième tient à l'écart entre le matériel visé par ce travail et celui pour lequel ces outils sont pensés@k3s_high_2026.
 etcd, qui porte la base de données interne de K3s, est conçu pour un stockage rapide.
@@ -46,7 +46,7 @@ La création d'un cluster à quatre machines en a donné une illustration : le s
 Le système s'est rétabli seul en une quarantaine de secondes sans aucune intervention, mais l'épisode illustre bien les limitations qui ne peuvent pas être prévues lors de la phase initiale de conception.
 
 La troisième difficulté est liée aux itérations qui ont été nécessaires pour obtenir une première image ants-os opérationnelle.
-Certaines particularités propres à l'OS Raspbian on mit du temps à être trouvées et comprises, et la construction d'une image air-gapée a demandé plusieurs essais avant d'aboutir à un résultat satisfaisant.
+Certaines particularités propres à l'OS Raspbian ont mis du temps à être trouvées et comprises, et la construction d'une image air-gapée a demandé plusieurs essais avant d'aboutir à un résultat satisfaisant.
 
 == Planification prévue et effective <section-results-planning>
 
@@ -69,10 +69,10 @@ Les deux figures restent volontairement approximatives : elles regroupent ou ome
 )
 
 Le premier écart concerne le système d'exploitation.
-L'apprentissage et la complexité des outils utilisés demande un travail que la planification a sous-estimé.
+L'apprentissage et la complexité des outils utilisés demandent un travail que la planification a sous-estimé.
 
 Le deuxième écart touche la rédaction.
-Le mémoire devait démarrer au début du mois de juin, il n'a réellement commencé qu'à la mi-juin.
+Le mémoire devait démarrer au début du mois de juin, mais il n'a réellement commencé qu'à la mi-juin.
 Le temps réservé à l'écriture avant l'échéance du rendu intermédiaire était donc plus court, ce qui a décalé le début du développement de antsd.
 
 Le troisième écart n'est pas un retard mais un découpage inadapté.
@@ -94,4 +94,4 @@ Certaines corrigent une limite déjà observée, d'autres répondent à une ques
 - *Corriger les cas non supportés restants* : le #ref(<table_tests_limits>) détaille déjà, cas par cas, la correction envisagée.
 - *Réaliser le décommissionnement* : volontairement écarté de ce travail pour prioriser le cœur des fonctionnalités (#ref(<section-implementation-decommission>)), il reste une commande de confort plutôt qu'une capacité manquante, et sa conception est déjà posée.
 - *Mettre en œuvre les mesures de sécurité retenues* : l'investigation aboutit à des recommandations priorisées, dont la fermeture de l'entrée du cluster comme mesure centrale (#ref(<section-security-priorities>)).
-- *Faciliter l'accès au cluster sans connaître son adresse IP* : afficher cette adresse sur l'écran d'une machine ants n'est pas un problème technique, mais demander à un client sans compétence de la saisir dans un navigateur va à l'encontre du produit visé. La question a été soulevée en cours de projet sans être tranchée. Deux pistes, hors du périmètre de ce travail, restent envisageables : diffuser un nom résolvable (par exemple `ants.local`), ou afficher un QR code sur l'écran de la machine, qui ouvrirait directement le tableau de bord depuis un téléphone.
+- *Faciliter l'accès au cluster sans connaître son adresse IP* : afficher cette adresse sur l'écran d'une machine ANTS n'est pas un problème technique, mais demander à un client sans compétence de la saisir dans un navigateur va à l'encontre du produit visé. La question a été soulevée en cours de projet sans être tranchée. Deux pistes, hors du périmètre de ce travail, restent envisageables : diffuser un nom résolvable (par exemple `ants.local`), ou afficher un QR code sur l'écran de la machine, qui ouvrirait directement le tableau de bord depuis un téléphone.

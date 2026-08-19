@@ -17,7 +17,7 @@ L'interprétation de ces observations par rapport aux objectifs du projet est r�
 Le développement d'un logiciel destiné à un ensemble de machines physiques pose un problème pratique évident.
 Reconstruire une image système complète et réécrire six cartes mémoire à chaque modification du code représenterait plusieurs dizaines de minutes pour un changement d'une ligne, ce qui est incompatible avec un rythme de travail raisonnable.
 Nous avons donc mis en place trois moyens complémentaires de vérifier le comportement du système, du plus rapide au plus fidèle.
-Aucun ne remplace les deux autres : le premier vérifie la logique, le deuxième le comportement d'ensemble, et le troisième seul dit la vérité sur le matériel réel.
+Aucun ne remplace les deux autres : le premier vérifie la logique, le deuxième le comportement d'ensemble, et seul le troisième dit la vérité sur le matériel réel.
 
 === Les tests automatisés
 
@@ -35,14 +35,14 @@ Ces tests occupent les fichiers en `_test.go` du paquet #src_dir("antsd/internal
 Le test le plus représentatif met en scène quatre machines (fonction `TestBootstrapFourNodes` dans le fichier #src("antsd/internal/cluster/bootstrap_test.go")).
 Il déclenche la création du cluster depuis la première, puis vérifie que les trois machines dont le nom vient en tête deviennent serveurs, que la quatrième devient agent, et que chacune a bien enregistré son rôle sur le disque.
 
-Ces tests du package #pkg("cluster") sont complétés par d'autres tests plus simples dans les autres packages.
-L'ensemble compte aujourd'hui presque une centaine de fonctions de test qui s'exécute en une dizaine de secondes, l'essentiel de cette durée revenant aux observations qui attendent qu'une machine simulée atteigne l'état voulu.
+Ces tests du paquet #pkg("cluster") sont complétés par d'autres tests plus simples dans les autres paquets.
+L'ensemble compte aujourd'hui presque une centaine de fonctions de test qui s'exécutent en une dizaine de secondes, l'essentiel de cette durée revenant aux observations qui attendent qu'une machine simulée atteigne l'état voulu.
 Cette rapidité tient à deux réglages propres aux tests : l'installation de K3s simulée rend la main en quelques millisecondes au lieu de plusieurs secondes, et les périodes d'attente du protocole sont également raccourcies.
 
-Ces tests ont permis de tester la non-régression et servent de garde-fou pour les règles que le système ne doit jamais enfreindre.
+Ces tests ont permis de vérifier la non-régression et servent de garde-fou pour les règles que le système ne doit jamais enfreindre.
 Par exemple, le refus de retomber sur le protocole de premier démarrage et l'interdiction d'annoncer un départ à l'arrêt, tous deux exposés au chapitre précédent, sont ainsi surveillés par des tests dédiés.
 
-Le coverage global de ces tests est d'environ 62% du code source, et près de 90% pour le code du paquet #pkg("cluster").
+La couverture globale de ces tests est d'environ 62 % du code source, et près de 90 % pour le code du paquet #pkg("cluster").
 
 Il faut cependant nommer la limite de ce moyen, car elle explique pourquoi les deux suivants existent.
 Un test de ce type vérifie que la logique de décision est juste, en supposant que le reste se comporte comme prévu.
@@ -60,7 +60,7 @@ C'est d'ailleurs la raison pour laquelle l'installation simulée attend quelques
 === Le déploiement sur les machines physiques <part-tests-deployment>
 
 Le troisième moyen s'adresse au matériel réel.
-Un ensemble de playbooks Ansible@ansible_ansible_2026 (#src_dir("ansible/playbooks")) permet de controler et de vérifier le comportement du système sur le banc d'essai physique.
+Un ensemble de playbooks Ansible@ansible_ansible_2026 (#src_dir("ansible/playbooks")) permet de contrôler et de vérifier le comportement du système sur le banc d'essai physique.
 
 Un playbook (#src("ansible/playbooks/deploy-antsd.yml")) compile le daemon pour ARM64 sur le poste de développement, puis distribue le binaire obtenu à toutes les machines de l'inventaire et redémarre le service correspondant.
 Cette solution prend quelques secondes, contre plusieurs dizaines de minutes pour une reconstruction complète de l'image.
@@ -72,7 +72,7 @@ Il n'y a donc aucune dépendance à Ansible.
 Trois autres playbooks complètent cette solution.
 Le premier prépare une machine fraîchement flashée, en fixant son nom et en installant le service du daemon.
 Le second est d'une autre nature, car il ne vérifie pas antsd mais le cluster lui-même.
-Il déploie une petite application hello-world sur chaque node du cluster K3s (donc sur chaque machine disponible), puis interroge toutes les machines l'une après l'autre et affiche quelle instance a répondu.
+Il déploie une petite application hello-world sur chaque nœud du cluster K3s (donc sur chaque machine disponible), puis interroge toutes les machines l'une après l'autre et affiche quelle instance a répondu.
 L'intérêt est qu'une machine interrogée peut parfaitement répondre par une instance hébergée ailleurs, ce qui prouve que le réseau interne de Kubernetes fonctionne d'une machine à l'autre.
 C'est la seule vérification qui atteste que le cluster rend réellement un service, là où tout le reste se contente de constater que antsd a déclaré K3s installé.
 L'image utilisée est d'ailleurs choisie parmi celles que ants-os embarque déjà, afin que cette vérification n'introduise aucun accès à Internet.
@@ -81,8 +81,8 @@ Le troisième playbook est un utilitaire de maintenance, qui permet de réinitia
 == Le banc d'essai <section-tests-testbed>
 
 Le banc d'essai physique est constitué de six Raspberry Pi 5 équipés de huit gigaoctets de mémoire vive, reliés par un switch.
-La liste du matériel prété par l'école est donnée dans l'annexe #ref(<annexe_testbed_inventory>).
-Il faut souligner une différence : le switch prévu n'est pas un modèle administrable, nous utilisons donc un modèle plus complet.
+La liste du matériel prêté par l'école est donnée dans l'#ref(<annexe_testbed_inventory>).
+Il faut souligner une différence : le switch prévu n'est pas un modèle administrable, et nous utilisons donc un modèle plus complet.
 Cela nous permet de placer les six machines dans un #acr("VLAN") isolé, et ainsi de momentanément couper l'accès à Internet sur ce segment pour s'assurer que le cluster ne dépend pas de ressources externes.
 
 Ce matériel correspond à l'ordre de grandeur des machines commercialisées par ANTS A.I. Systems, tout en restant d'un coût modeste.
@@ -118,7 +118,7 @@ Ces identifiants sont stables et ne sont jamais réattribués, si bien que les s
 Les pannes sont provoquées physiquement, ce qui est précisément ce que le banc apporte.
 Débrancher l'alimentation d'une machine reproduit la coupure de courant et le plantage matériel.
 Débrancher le câble réseau produit une situation différente, car la machine continue de fonctionner en aveugle, ce qui permet d'observer séparément les deux côtés d'une coupure.
-En pratique, la coupure réseau est parfois réalisée grâce à des routes "blackhole" sur les machines, ce qui permet de couper le réseau sans intervention physique et de garder la machine controlable à distance.
+En pratique, la coupure réseau est parfois réalisée grâce à des routes "blackhole" sur les machines, ce qui permet de couper le réseau sans intervention physique et de garder la machine contrôlable à distance.
 Un redémarrage propre, l'arrêt d'un service ou la corruption volontaire du fichier d'état complètent ces injections lorsque le scénario vise un mécanisme précis du daemon plutôt qu'une panne réaliste.
 
 Pour la remise à zéro entre deux scénarios, la procédure consiste donc à désinstaller K3s et à supprimer le fichier d'état, ce qu'automatise un playbook dédié (voir #ref(<part-tests-deployment>, supplement: [section])).
@@ -128,7 +128,7 @@ Ce choix est motivé par l'économie de temps, car une remise à zéro suivie d'
 
 Reste la question de l'observation, à laquelle le matériel choisi oppose deux obstacles.
 Le premier est que Raspberry Pi OS conserve le journal du système en mémoire vive afin d'épargner la carte mémoire, si bien que ce journal disparaît au redémarrage.
-Le second est que ces machines ne possèdent pas d'horloge sauvegardée par pile : elles démarrent avec une date éronnée, puis la synchronisation réseau corrige l'heure d'un seul coup, causant un saut important.
+Le second est que ces machines ne possèdent pas d'horloge sauvegardée par pile : elles démarrent avec une date erronée, puis la synchronisation réseau corrige l'heure d'un seul coup, causant un saut important.
 Comparer les horodatages de deux machines sans précaution n'a donc aucun sens.
 
 Ces deux obstacles ont chacun leur réponse.
@@ -192,7 +192,7 @@ Enfin, chaque scénario n'est exécuté qu'une fois, sauf si le résultat s'éca
 == Les scénarios <section-tests-scenarios>
 
 Les scénarios sont regroupés en cinq familles, qui suivent le cycle de vie d'une machine puis les pannes qu'elle peut subir.
-Chacune correspond à un chemin de la machine d'états présentée au #ref(<chapter-conception>), et les identifiants entre parenthèses renvoient aux fiches du dépôt (#src_dir("docs/protocoles-tests")), afin que chaque chiffre publié ici soit rattachable à un protocole précis.
+Chacune correspond à un chemin de la machine d'états présentée au #ref(<chapter-conception>).
 
 === Création du cluster <part-tests-bootstrap>
 
@@ -204,7 +204,7 @@ Les tailles intermédiaires ne font pas l'objet d'un premier démarrage dédié,
 
 L'injection consiste à demander la création du cluster depuis le tableau de bord de la première machine, à vérifier que le nombre de machines découvertes correspond à ce qui est branché, puis à confirmer.
 La mesure court de l'instant où cette machine entre en attente jusqu'à l'instant où la dernière machine du lot atteint son état stable.
-Le déroulé attendu est celui du #ref(<fig_conception_bootstrap-sequence>) : les serveurs s'installent strictement l'un après l'autre, et les agents ne démarrent qu'une fois le plan de contrôle complet.
+Le déroulé attendu est celui de la #ref(<fig_conception_bootstrap-sequence>) : les serveurs s'installent strictement l'un après l'autre, et les agents ne démarrent qu'une fois le plan de contrôle complet.
 
 Trois grandeurs sont relevées séparément, car elles ne se comportent pas de la même façon quand le cluster grandit : la durée du script d'installation, celle de la sonde de disponibilité qui suit, et l'écart entre deux installations de serveur successives.
 La comparaison des deux tailles donne le coût d'échelle du protocole, c'est-à-dire le prix payé pour ajouter les membres un par un plutôt que tous à la fois.
@@ -217,7 +217,7 @@ Les quatre machines finissent malgré tout dans leur état stable et l'utilisate
 Ce compteur est donc la seule mesure qui rende ce défaut visible, et l'analyse de sa cause comme les corrections envisagées appartiennent au #ref(<chapter-results>).
 
 Un dernier essai de cette famille vérifie un refus plutôt qu'une réussite (`TB-07`).
-Une machine sur laquelle K3s est installé mais dont le fichier d'état a été supprimé doit refuser d'installer par dessus les données existantes et s'arrêter dans un état d'échec en nommant la reprise attendue.
+Une machine sur laquelle K3s est installé mais dont le fichier d'état a été supprimé doit refuser d'installer par-dessus les données existantes et s'arrêter dans un état d'échec en nommant la reprise attendue.
 C'est exactement la situation que produit un premier démarrage ayant échoué tardivement.
 
 Les deux créations sont conformes.
@@ -289,7 +289,7 @@ Un quatrième scénario (`TR-04`) ne redémarre que le daemon, sans toucher ni �
 Il sert à isoler la part qui revient réellement à antsd dans les durées précédentes.
 
 Le dernier scénario (`TR-05`) corrompt volontairement le fichier d'état d'une machine.
-Elle doit s'arrêter dans un état d'échec terminal et ne jamais repartir sur le protocole de premier démarrage, puisque celui-ci réinstallerait K3s par dessus des données existantes.
+Elle doit s'arrêter dans un état d'échec terminal et ne jamais repartir sur le protocole de premier démarrage, puisque celui-ci réinstallerait K3s par-dessus des données existantes.
 La conséquence à vérifier est qu'une fois dans cet état, elle ne gèle plus aucune réparation du cluster, contrairement à la reprise dont elle sort.
 
 Les quatre scénarios sont conformes.
@@ -310,7 +310,7 @@ Le coordinateur journalise un déséquilibre du plan de contrôle deux secondes 
 
 === Redimensionnement <part-tests-rescale>
 
-La quatrième famille est celle du mécanisme de rescaling.
+La quatrième famille est celle du mécanisme de redimensionnement.
 Elle demande de garder en tête que la population compte les machines en panne, une machine débranchée conservant sa place et son emplacement de serveur tant qu'elle n'est pas évincée.
 Rien ne bouge donc avant la fin de la période de grâce, et ce n'est pas un délai de réaction mais le mécanisme lui-même.
 
@@ -375,8 +375,8 @@ La haute disponibilité tient.
 Pendant la perte d'un serveur sur trois, une seule sonde de disponibilité échoue sur 526, soit moins d'une seconde d'interruption, et elle ne survient pas au moment de la bascule mais plus tard, pendant la replanification des charges.
 La mesure la plus parlante de cet essai est cependant ailleurs : Serf voit la machine en panne en 7,5 s là où Kubernetes met une quarantaine de secondes à la déclarer indisponible, soit un rapport de un à six entre les deux couches.
 
-Du côté de l'application, la même panne ouvre une fenêtre de dégradation de 45 s, pendant laquelle 12 requêtes échouent sur environ 48.
-Ce quart correspond exactement à la part que le routage interne envoyait encore aux trois pods perdues (le server hébergait 3 pod, ce qui explique ce nombre) sur les six du service.
+Du côté de l'application, la même panne ouvre une fenêtre de dégradation de 45 s, pendant laquelle 12 requêtes échouent.
+Ces échecs correspondent à la part que le routage interne envoyait encore aux trois pods perdus (le serveur hébergeait trois pods, ce qui explique ce nombre) sur les six du service.
 Il n'y a donc à aucun moment de coupure totale, et le service retrouve son taux de réponse normal avant même que Kubernetes ne replanifie les charges.
 
 La partition réseau se lit des deux côtés comme prévu.
@@ -409,9 +409,9 @@ Conformément à la règle énoncée plus haut, cet essai a été rejoué sur un
 Aucun correctif n'est livré, faute de temps, et le cas est repris dans la section suivante.
 
 Cependant, il faut nuancer ce constat.
-Les délais très courts de la campagne ont emplifié le problème.
-Dans un cas réel, les délais bien plus longs de la période de grâce et du délai anti-rebond, réduisent fortement la probabilité d'une telle collision.
-S'il est acceptable d'augmenter d'avantages ces délais par rapport à nos valeurs choisi arbitrairement (ce qui est une décision que ANTS peut prendre), il est possible de réduire encore la probabilité.
+Les délais très courts de la campagne ont amplifié le problème.
+Dans un cas réel, les délais bien plus longs de la période de grâce et du délai anti-rebond réduisent fortement la probabilité d'une telle collision.
+S'il est acceptable d'augmenter davantage ces délais par rapport à nos valeurs choisies arbitrairement (ce qui est une décision qu'ANTS peut prendre), il est possible de réduire encore la probabilité.
 
 === Synthèse des mesures <part-tests-results>
 
@@ -461,7 +461,6 @@ Une partition réseau est encaissée tant qu'elle dure, mais pas au moment où e
 C'est un problème rare, mais qui doit être corrigé.
 
 Le #ref(<table_tests_limits>) rassemble les cas non supportés.
-La colonne « preuve » indique si le cas a été rejoué sur le banc (B) ou déduit du code et des tests automatisés (C), ces derniers demandant chacun une remise à zéro dédiée pour une démonstration dont le code dit déjà le résultat.
 
 #hepia.sourced_figure(
   caption: [Cas non supportés, comportement observé et reprise attendue],
@@ -510,7 +509,7 @@ La colonne « preuve » indique si le cas a été rejoué sur le banc (B) ou dé
 
 Les corrections que nous recommandons pour ces cas sont les suivantes.
 
-- *Machine évincée qui redémarre* : détecter au démarrage que le cluster ne connaît plus cette machine, et s'arrêter en échec aussitôt plutôt qu'attendre l'échéance complète.
+- *Machine évincée qui redémarre* : détecter au démarrage que le cluster ne connaît plus cette machine, et s'arrêter en échec aussitôt plutôt que d'attendre l'échéance complète.
 - *Éviction mutuelle* : recouper la vue Serf avec la liste des nœuds Kubernetes avant toute éviction, et refuser d'agir pendant un temps de cooldown après le retour du quorum.
 - *Perte du quorum* : la détecter et l'afficher, au lieu de retenter en silence.
 - *Fichier d'état corrompu* : sauvegarde de secours du fichier, ou reconstruction depuis le rôle installé.
@@ -533,7 +532,7 @@ Il confirme aussi que rien n'en est dit à l'utilisateur, ce qui est plus gênan
 Supporter un tel cas de figure de manière automatique est complexe, et n'est pas prévu avec la conception actuelle.
 
 Le troisième est l'éviction mutuelle à la guérison d'une partition, le plus coûteux des trois puisqu'il détruit un cluster par ailleurs en bon état.
-Il montre la limite exacte de cette même vérification de quorum, qui répond à la question « suis-je du côté majoritaire ? » mais pas à la question « la vue sur laquelle je m'apprête à agir est-elle contemporaine de cette réponse ? ».
+Il montre la limite exacte de cette même vérification de quorum, qui répond à la question "suis-je du côté majoritaire ?" mais pas à la question "la vue sur laquelle je m'apprête à agir est-elle contemporaine de cette réponse ?".
 Or les deux couches ne guérissent pas à la même vitesse, et c'est la plus rapide des deux qui autorise ici une action décidée à partir de la plus lente.
 La leçon dépasse ce cas particulier : la couche qui subit la conséquence d'une décision devrait être celle qui en fournit la donnée d'entrée, une éviction retirant après tout un nœud Kubernetes et un membre de sa base de données.
 

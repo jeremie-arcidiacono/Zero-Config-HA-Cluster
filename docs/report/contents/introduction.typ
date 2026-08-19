@@ -17,7 +17,7 @@ L'objectif est donc de conceptualiser une nouvelle solution logicielle d'orchest
 
 Ce travail s'inscrit dans le cadre du Travail de Bachelor en Informatique et Systèmes de Communication à la #acr("HEPIA"). 
 Effectué en collaboration avec ANTS A.I. Systems, ce projet se déroule sur une période de 12 semaines, à hauteur de 40 heures par semaine.
-Il se base sur un travail préparatoire réalisé lors du "projet de semestre"@arcidiacono_systeme_2026, réalisé entre octobre 2025 et avril 2026.
+Il se base sur un travail préparatoire mené lors du "projet de semestre"@arcidiacono_systeme_2026, réalisé entre octobre 2025 et avril 2026.
 Cette base a permis de définir les besoins et les contraintes du projet, et d'identifier les solutions existantes. 
 
 La réalisation de ce projet s'est déroulée en plusieurs étapes. Elle a d'abord commencé par la reprise du travail préparatoire du projet de semestre@arcidiacono_systeme_2026, afin de consolider les choix déjà posés et de revoir les besoins du système. Ensuite, une partie importante du travail a consisté à préciser l'architecture cible et à définir le comportement attendu des différents composants.
@@ -33,7 +33,7 @@ Concernant les illustrations, sauf mention explicite d'une source sous la figure
 
 L'intégralité de ce travail est publiée dans un dépôt Git public, à l'adresse #link(repo_url).
 Les extraits de code, les fichiers et les scripts cités dans ce document pointent tous vers ce dépôt.
-Le dépôt a également un mirroir sur le GitLab de la HES-SO Genève #link("https://gitedu.hesge.ch/flg_bachelors/tb/2026/zero-config-ha-cluster").
+Le dépôt a également un miroir sur le GitLab de la HES-SO Genève #link("https://gitedu.hesge.ch/flg_bachelors/tb/2026/zero-config-ha-cluster").
 
 Quelques conventions accompagnent le dépôt depuis le début du projet.
 Les grandes étapes fonctionnelles sont développées sur des branches dédiées dont le nom reprend la nature du changement et le domaine concerné, par exemple `feat/antsd-add-rescaling` (convention #emph("Conventional Branch")@conventional_branch_conventional_2026).
@@ -45,7 +45,7 @@ Ils ont servi à trois usages.
 Le premier est la recherche documentaire, pour obtenir une synthèse d'une documentation ou d'un code source tiers.
 Le deuxième est la rédaction, pour la reformulation de certains passages de ce mémoire, la relecture orthographique et l'amélioration du visuel (par exemple les couleurs) des diagrammes.
 Le troisième est le développement, pour produire du code, en particulier sur les aspects "aide au développement" comme les tests et la partie Ansible, et pour obtenir une relecture critique du code écrit.
-L'architecture, les décisions de conception et la structure de ce document n'ont en revanche pas été délégués.
+L'architecture, les décisions de conception et la structure de ce document n'ont en revanche pas été déléguées.
 Le code et le texte générés ont été systématiquement relus.
 
 Ce document est structuré de la façon suivante :
@@ -58,7 +58,7 @@ Il explique comment antsd est organisé et les mécanismes concrètement mis en 
 
 Le quatrième chapitre présente les tests effectués sur le banc d'essai, ainsi que les résultats obtenus.
 
-Le cinquième chapitre aborde la sécurité. Il présente l'état actuel du système, ses limitations et les choix retenus pour protéger le système.
+Le cinquième chapitre aborde la sécurité. Il présente l'état actuel du système, ses limitations et les choix retenus pour le protéger.
 
 Le sixième chapitre présente les résultats et la discussion. Il dresse le bilan du travail réalisé, met en avant les limites observées et ouvre sur les améliorations possibles.
 
